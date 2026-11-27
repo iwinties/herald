@@ -1,0 +1,333 @@
+show_card:
+  name: show card
+  fields:
+    device_id:
+      name: device id
+      selector:
+        device: {integration: herald, multiple: true}
+    id:
+      name: id
+      selector:
+        text: {}
+    category:
+      name: category
+      selector:
+        text: {}
+    title:
+      name: title
+      selector:
+        text: {}
+    message:
+      name: message
+      selector:
+        text: {}
+    from:
+      name: from
+      selector:
+        text: {}
+    buttons:
+      name: buttons
+      selector:
+        object: {}
+    image:
+      name: image
+      selector:
+        object: {}
+    video:
+      name: video
+      selector:
+        object: {}
+    style:
+      name: style
+      selector:
+        object: {}
+    priority:
+      name: priority
+      selector:
+        text: {}
+    icon:
+      name: icon
+      selector:
+        text: {}
+    speakers:
+      name: speakers
+      selector:
+        entity: {domain: media_player, multiple: true}
+    request_id:
+      name: request id
+      selector:
+        text: {}
+    volume:
+      name: volume
+      selector:
+        number: {min: 0, max: 100}
+    urgent:
+      name: urgent
+      selector:
+        boolean: {}
+    output:
+      name: output
+      selector:
+        select: {options: [auto, tv, speaker]}
+    tts:
+      name: tts
+      selector:
+        entity: {domain: tts}
+    language:
+      name: language
+      selector:
+        text: {}
+    options:
+      name: options
+      selector:
+        object: {}
+    chime:
+      name: chime
+      selector:
+        object: {}
+    duck:
+      name: duck
+      selector:
+        boolean: {}
+    announce:
+      name: announce
+      selector:
+        boolean: {}
+    announce_text:
+      name: announce text
+      selector:
+        text: {}
+    announce_timing:
+      name: announce timing
+      selector:
+        select: {options: [with_voice, now]}
+    look:
+      name: look
+      selector:
+        text: {}
+clear_card:
+  name: clear card
+  fields:
+    device_id:
+      name: device id
+      selector:
+        device: {integration: herald, multiple: true}
+    id:
+      name: id
+      selector:
+        text: {}
+    category:
+      name: category
+      selector:
+        text: {}
+    all:
+      name: all
+      selector:
+        boolean: {}
+set_chip:
+  name: set chip
+  fields:
+    device_id:
+      name: device id
+      selector:
+        device: {integration: herald, multiple: true}
+    id:
+      name: id
+      selector:
+        text: {}
+    text:
+      name: text
+      selector:
+        text: {}
+    priority:
+      name: priority
+      selector:
+        text: {}
+    color:
+      name: color
+      selector:
+        text: {}
+    icon:
+      name: icon
+      selector:
+        text: {}
+    expires:
+      name: expires
+      selector:
+        number: {min: 0, max: 604800}
+    look:
+      name: look
+      selector:
+        text: {}
+    position:
+      name: position
+      selector:
+        text: {}
+clear_chip:
+  name: clear chip
+  fields:
+    device_id:
+      name: device id
+      selector:
+        device: {integration: herald, multiple: true}
+    id:
+      name: id
+      selector:
+        text: {}
+announce:
+  name: announce
+  fields:
+    device_id:
+      name: device id
+      selector:
+        device: {integration: herald, multiple: true}
+    speakers:
+      name: speakers
+      selector:
+        entity: {domain: media_player, multiple: true}
+    request_id:
+      name: request id
+      selector:
+        text: {}
+    volume:
+      name: volume
+      selector:
+        number: {min: 0, max: 100}
+    urgent:
+      name: urgent
+      selector:
+        boolean: {}
+    output:
+      name: output
+      selector:
+        select: {options: [auto, tv, speaker]}
+    message:
+      name: message
+      selector:
+        text: {}
+    tts:
+      name: tts
+      selector:
+        entity: {domain: tts}
+    language:
+      name: language
+      selector:
+        text: {}
+    options:
+      name: options
+      selector:
+        object: {}
+    media:
+      name: media
+      selector:
+        text: {}
+    audio:
+      name: audio
+      selector:
+        text: {}
+    card:
+      name: card
+      selector:
+        object: {}
+    show:
+      name: show
+      selector:
+        boolean: {}
+    from:
+      name: from
+      selector:
+        text: {}
+    chime:
+      name: chime
+      selector:
+        object: {}
+    duck:
+      name: duck
+      selector:
+        boolean: {}
+play_sound:
+  name: play sound
+  fields:
+    device_id:
+      name: device id
+      selector:
+        device: {integration: herald, multiple: true}
+    speakers:
+      name: speakers
+      selector:
+        entity: {domain: media_player, multiple: true}
+    request_id:
+      name: request id
+      selector:
+        text: {}
+    volume:
+      name: volume
+      selector:
+        number: {min: 0, max: 100}
+    urgent:
+      name: urgent
+      selector:
+        boolean: {}
+    output:
+      name: output
+      selector:
+        select: {options: [auto, tv, speaker]}
+    media:
+      name: media
+      selector:
+        text: {}
+    path:
+      name: path
+      selector:
+        text: {}
+stop:
+  name: stop
+  fields:
+    device_id:
+      name: device id
+      selector:
+        device: {integration: herald, multiple: true}
+restore_settings:
+  name: restore settings
+  fields:
+    device_id:
+      name: device id
+      selector:
+        device: {integration: herald, multiple: true}
+    snapshot:
+      name: snapshot
+      selector:
+        text: {}
+save_look:
+  name: save look
+  fields:
+    device_id:
+      name: device id
+      selector:
+        device: {integration: herald, multiple: true}
+    id:
+      name: id
+      required: true
+      selector:
+        text: {}
+    style:
+      name: style
+      required: true
+      selector:
+        object: {}
+    name:
+      name: name
+      selector:
+        text: {}
+delete_look:
+  name: delete look
+  fields:
+    device_id:
+      name: device id
+      selector:
+        device: {integration: herald, multiple: true}
+    id:
+      name: id
+      required: true
+      selector:
+        text: {}

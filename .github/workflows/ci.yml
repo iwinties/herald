@@ -1,0 +1,21 @@
+name: Herald CI
+
+'on': [push, pull_request]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Build APK and run JVM and packaging checks
+        run: HERALD_KEYS="$RUNNER_TEMP/keys" DOCKER=docker tools/build.sh
+      - name: Run offline Home Assistant tests
+        run: tests/ha/run.sh
+      - name: Remove temporary signing material
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/keys"

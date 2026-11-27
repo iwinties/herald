@@ -1,0 +1,11 @@
+# Build output and local state; never commit signing keys or tokens.
+out/
+**/__pycache__/
+*.pyc
+*.jks
+*.keystore
+.env
+.env.*
+.agents/
+.claude/
+.codex/

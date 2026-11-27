@@ -1,0 +1,101 @@
+{
+  "title": "Herald",
+  "config": {
+    "step": {
+      "user": {
+        "menu_options": {
+          "box": "Add a Herald box",
+          "speakers": "Herald settings"
+        }
+      },
+      "box": {
+        "title": "Box address",
+        "data": {
+          "host": "Host",
+          "port": "Port"
+        }
+      },
+      "confirm": {
+        "title": "Pair this Herald box"
+      },
+      "code": {
+        "title": "Enter the code shown on the TV",
+        "data": {
+          "code": "Pairing code"
+        }
+      }
+    },
+    "error": {
+      "screen_off": "Turn on the screen",
+      "wrong_code": "Incorrect code",
+      "pairing_disabled": "Pairing is disabled",
+      "too_many_clients": "The client list is full",
+      "expired": "The code expired",
+      "cannot_connect": "Cannot connect to Herald"
+    },
+    "abort": {
+      "wrong_device": "This is not the paired box",
+      "already_configured": "Already configured",
+      "invalid_discovery": "Invalid discovery",
+      "reauth_successful": "Pairing renewed"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "menu_options": {
+          "speakers": "Cast speakers",
+          "voice": "Default voice"
+        }
+      },
+      "volumes": {
+        "title": "Announcement volumes"
+      },
+      "night": {
+        "title": "Night hours",
+        "data": {
+          "night_start": "Start",
+          "night_end": "End",
+          "speaker_at_night": "Play at night"
+        }
+      },
+      "speakers": {
+        "title": "Cast speakers",
+        "data": {
+          "speakers": "Media players"
+        }
+      },
+      "voice": {
+        "title": "Default voice",
+        "data": {
+          "tts": "Text-to-speech entity",
+          "language": "Language",
+          "options": "Voice options"
+        }
+      }
+    },
+    "abort": {
+      "no_options": "This entry has no options"
+    },
+    "error": {
+      "unsupported_speaker": "Select players that support playback and volume control."
+    }
+  },
+  "issues": {
+    "new_address": {
+      "title": "Herald {name} appeared at {host}:{port}",
+      "description": "Confirm the new address to reconnect.",
+      "fix_flow": {
+        "step": {
+          "init": {
+            "title": "Use the new address?"
+          }
+        },
+        "error": {
+          "wrong_device": "This is not the paired box",
+          "cannot_connect": "Cannot connect to Herald"
+        }
+      }
+    }
+  }
+}

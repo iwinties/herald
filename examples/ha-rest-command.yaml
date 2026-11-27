@@ -1,0 +1,25 @@
+# Merge under rest_command in configuration.yaml. Set herald_token privately in
+# secrets.yaml to the COMPLETE Authorization header value (Bearer, space, token).
+# Replace 192.0.2.10 with your box address.
+rest_command:
+  show_card:
+    url: "http://192.0.2.10:7979/v1/cards"
+    method: POST
+    headers:
+      Authorization: !secret herald_token
+    content_type: application/json
+    payload: "{{ {'id': id, 'message': message} | to_json }}"
+
+  clear_card:
+    url: "http://192.0.2.10:7979/v1/cards/{{ id | urlencode }}"
+    method: DELETE
+    headers:
+      Authorization: !secret herald_token
+
+  announce:
+    url: "http://192.0.2.10:7979/v1/announce"
+    method: POST
+    headers:
+      Authorization: !secret herald_token
+    content_type: application/json
+    payload: "{{ {'text': text, 'request_id': request_id} | to_json }}"

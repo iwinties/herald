@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/iwinties/ai-foundation/schemas/memory-entry.schema.json",
+  "title": "Memory entry frontmatter",
+  "description": "YAML frontmatter of a memory-entry file, parsed to a JSON object. The markdown body (fact, evidence, implications) is out of scope. No secrets/credential values ever; SOPS/location pointers instead.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "id",
+    "title",
+    "status",
+    "type",
+    "scope",
+    "created",
+    "last_verified",
+    "verified_against",
+    "sources"
+  ],
+  "properties": {
+    "id": {
+      "$ref": "#/$defs/memId"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "pattern": "^[^\\u0000-\\u001F\\u007F]*$"
+    },
+    "status": {
+      "enum": ["active", "archived"]
+    },
+    "type": {
+      "enum": ["constraint", "gotcha", "pitfall", "reference", "decision", "preference", "howto"]
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1,
+      "description": "e.g. \"repo:server-ops\", \"host:bierlab\", \"component:auth\""
+    },
+    "created": {
+      "$ref": "#/$defs/isoDate"
+    },
+    "last_verified": {
+      "$ref": "#/$defs/isoDate"
+    },
+    "verified_against": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]*@[0-9a-f]{4,64}$",
+      "description": "\"<repo-id>@<commit-or-short-sha>\""
+    },
+    "sources": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 32,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/source"
+      }
+    },
+    "related": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/memId"
+      }
+    },
+    "supersedes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/memId"
+      }
+    },
+    "archive_reason": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500
+    },
+    "confidence": {
+      "enum": ["low", "medium", "high"]
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  },
+  "$defs": {
+    "memId": {
+      "type": "string",
+      "pattern": "^MEM-[a-z0-9-]+$"
+    },
+    "isoDate": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+    },
+    "source": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500,
+      "description": "same-project Git evidence (<repo-id>:<path>#<anchor>) or a supplemental credential-free HTTPS URL; native session paths are discovery-only and forbidden here",
+      "pattern": "^(?:(?:url:)?https://\\S+|(?!claude-native:|codex-native:)[a-z0-9][a-z0-9._-]*:[^\\s#]+(#\\S+)?)$"
+    }
+  }
+}
