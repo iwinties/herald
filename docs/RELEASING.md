@@ -67,6 +67,14 @@ recorded commit. Both need an authenticated GitHub CLI.
   (it lists the five latest releases and reads the version from the release tag). Download it,
   then restart Home Assistant. Boxes and integration must run the same version.
 
+### Where releases come from
+
+Herald is developed in a private repository. Each release reaches this repository as one commit
+"Herald <version>", exported from the development tree after the candidate was checked. The app,
+integration and test trees of that commit are byte-identical to the ones the APK was built and
+tested from, and the release manifest records this public commit. Pull requests are welcome
+here; accepted changes ship with the next release commit.
+
 ### Keeping the repository public-safe
 
 This repository is public. Release notes, the support matrix and commits describe behavior and
