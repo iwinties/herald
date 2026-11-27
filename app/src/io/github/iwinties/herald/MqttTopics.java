@@ -29,7 +29,7 @@ final class MqttTopics {
         this.commands = commands;
     }
 
-    static Map<String,Object> txt(String id, String version) { return Json.fields("id", id, "api", "1", "version", version); }
+    static Map<String,Object> txt(String id, String version) { return Json.fields("id", id, "api", "2", "version", version); }
 
     String commandName(String topic, boolean retained) {
         if (!commands || retained || !topic.startsWith(root + "cmd/")) return null;

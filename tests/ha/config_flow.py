@@ -5,13 +5,16 @@ import logging
 import os
 import sys
 
-from fake_herald import begin, pair, run, step, until
+from contextlib import AsyncExitStack
+from unittest.mock import patch
+
+from fake_herald import FakeHerald, begin, run, step, until
 from homeassistant import loader
 from homeassistant.helpers import issue_registry
 from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 
 
-def discovery(box, identity=None):
+def discovery(box, identity=None, api="2"):
     ip = ipaddress.ip_address("127.0.0.1")
     return ZeroconfServiceInfo(
         ip_address=ip,
@@ -20,7 +23,7 @@ def discovery(box, identity=None):
         hostname=box.name + ".local.",
         type="_herald._tcp.local.",
         name=box.name + "._herald._tcp.local.",
-        properties={"id": identity or box.identity},
+        properties={"id": identity or box.identity, "api": api},
     )
 
 
@@ -31,17 +34,38 @@ async def exercise(hass, a, b, root):
     stream = io.StringIO()
     handler = logging.StreamHandler(stream)
     logging.getLogger().addHandler(handler)
+    stack = AsyncExitStack()
+
+    async def extra_box(**kwargs):
+        box = await FakeHerald("Fixture", **kwargs).start()
+        stack.push_async_callback(box.close)
+        return box
+
     try:
-        entry = await pair(hass, a)
+        flow = await begin(hass, "127.0.0.1", a.port)
+        assert flow["step_id"] == "code"
+        fingerprint = " ".join(
+            a.cert_sha256[i : i + 4].upper() for i in range(0, 16, 4)
+        )
+        assert flow["description_placeholders"]["fingerprint"] == fingerprint
+        entry = (await step(hass, flow, {"code": a.code}))["result"]
+        assert entry.version == 2 and entry.data["cert_sha256"] == a.cert_sha256
+        assert entry.state.value == "loaded"
+        print("PASS pairing pins the certificate from info and stores cert_sha256")
         assert entry.data["token"] == a.token and entry.unique_id == a.identity
         print("PASS manual host pairs with the code and stores the token")
 
-        async def discover(box, identity=None):
+        async def discover(box, identity=None, api="2"):
             return await hass.config_entries.flow.async_init(
-                "herald", context={"source": "zeroconf"}, data=discovery(box, identity)
+                "herald",
+                context={"source": "zeroconf"},
+                data=discovery(box, identity, api),
             )
 
         b.token = "west-fixture"
+        assert (await discover(b, api="1"))["reason"] == "invalid_discovery"
+        assert (await discover(b, api=None))["reason"] == "invalid_discovery"
+        print("PASS zeroconf needs TXT api 2")
         flow = await discover(b)
         assert flow["step_id"] == "confirm"
         flow = await step(hass, flow, {})
@@ -69,21 +93,66 @@ async def exercise(hass, a, b, root):
         )
         repair = await async_create_fix_flow(hass, issue.issue_id, issue.data)
         repair.hass = hass
-        assert (await repair.async_step_init({}))["errors"]["base"] == "wrong_device"
-        assert (
-            entry.data["port"] == a.port
-            and sum(p == "info" for _, p, _ in b.calls[counts:]) == 1
+        requests = b.request_count
+        assert (await repair.async_step_init({}))["errors"]["base"] == "cannot_connect"
+        assert b.request_count == requests and entry.data["port"] == a.port
+        print(
+            "PASS the address repair refuses another certificate without sending a request"
         )
-        assert not b.public_auth_seen
-        b.identity = a.identity
-        b.token = a.token
+        b = await extra_box(identity=a)
+        repair = await async_create_fix_flow(
+            hass, issue.issue_id, {**issue.data, "port": b.port}
+        )
+        repair.hass = hass
+        b.next["GET", "info"] = (200, {"ok": True, "app": "herald", "id": "other"})
+        assert (await repair.async_step_init({}))["errors"]["base"] == "wrong_device"
+        assert entry.data["port"] == a.port and not b.public_auth_seen
         old = entry.runtime_data
         assert (await repair.async_step_init({}))["type"] == "create_entry"
         assert entry.data["port"] == b.port and entry.runtime_data is not old
         print(
             "PASS the repair fix re-checks the box id, then updates host and port and reloads"
         )
+        assert b.cert_sha256 == a.cert_sha256
+        print("PASS the address repair accepts the same certificate on a new port")
         a.identity = "third"
+        base_info = {
+            "ok": True,
+            "app": "herald",
+            "api": 2,
+            "id": a.identity,
+            "name": a.name,
+        }
+        for invalid in (
+            {"api": 1, "cert_sha256": a.cert_sha256},
+            {},
+            {"cert_sha256": "z" * 64},
+        ):
+            starts = len(a.seen("POST", "pair/start"))
+            a.next["GET", "info"] = (200, {**base_info, **invalid})
+            assert (await begin(hass, "127.0.0.1", a.port))[
+                "reason"
+            ] == "unsupported_box"
+            assert len(a.seen("POST", "pair/start")) == starts
+        print("PASS pairing refuses api 1 boxes")
+        requests = a.request_count
+        a.next["GET", "info"] = (200, {**base_info, "cert_sha256": "00" * 32})
+        flow = await begin(hass, "127.0.0.1", a.port)
+        assert (
+            flow["errors"]["base"] == "cannot_connect"
+            and a.request_count == requests + 1
+        )
+        hass.config_entries.flow.async_abort(flow["flow_id"])
+        flow = await begin(hass, "127.0.0.1", a.port)
+        assert flow["step_id"] == "code"
+        await a.rotate_certificate()
+        requests = a.request_count
+        result = await step(hass, flow, {"code": a.code})
+        assert (
+            result["errors"]["base"] == "cannot_connect" and a.request_count == requests
+        )
+        hass.config_entries.flow.async_abort(flow["flow_id"])
+        print("PASS pairing sends the code only over the pinned connection")
         for message, expected in [
             ("screen off", "screen_off"),
             ("pairing disabled", "pairing_disabled"),
@@ -122,6 +191,37 @@ async def exercise(hass, a, b, root):
             )
         )
         print("PASS a 401 stops polling, re-pairs the same box and reloads")
+        for during_setup in (False, True):
+            old = entry.runtime_data
+            if during_setup:
+                await hass.config_entries.async_unload(entry.entry_id)
+            await b.rotate_certificate()
+            if during_setup:
+                await hass.config_entries.async_setup(entry.entry_id)
+            else:
+                await old.async_refresh()
+                assert old.auth_failed
+                await old.async_refresh()
+            flows = [
+                f
+                for f in hass.config_entries.flow.async_progress_by_handler("herald")
+                if f["context"].get("entry_id") == entry.entry_id
+            ]
+            assert len(flows) == 1 and entry.data["cert_sha256"] != b.cert_sha256
+            flow = await step(hass, flows[0], {})
+            assert (await step(hass, flow, {"code": b.code}))[
+                "reason"
+            ] == "reauth_successful"
+            await until(
+                lambda: (
+                    getattr(entry, "runtime_data", old) is not old
+                    and entry.runtime_data.event_task is not None
+                )
+            )
+            assert entry.data["cert_sha256"] == b.cert_sha256
+        print("PASS a changed certificate starts reauth and re-pins")
+
+        await migration_checks(hass, entry, b, await extra_box(plain=True))
         data = {
             "video": "rtsp://user:SENTINEL-PASS@h/x",
             "mqtt": {"password": "SENTINEL-MQTT"},
@@ -150,7 +250,7 @@ async def exercise(hass, a, b, root):
         else:
             raise AssertionError("expected a transport exception")
         diagnostic = json.dumps(await async_get_config_entry_diagnostics(hass, entry))
-        assert "rtsp://h/x" in diagnostic
+        assert "rtsp://h/x" in diagnostic and b.cert_sha256 in diagnostic
         for sentinel in (a.token, "SENTINEL-MQTT", "SENTINEL-PASS", b.code):
             assert (
                 sentinel
@@ -165,6 +265,15 @@ async def exercise(hass, a, b, root):
         )
         settings = (await step(hass, flow, {"next_step_id": "speakers"}))["result"]
         assert settings.unique_id == "speakers" and settings.title == "Herald settings"
+        from custom_components.herald import async_migrate_entry
+
+        hass.config_entries.async_update_entry(settings, version=1)
+        assert await async_migrate_entry(hass, settings)
+        assert settings.version == 2 and settings.data == {}
+        hass.config_entries.async_update_entry(settings, version=3)
+        assert not await async_migrate_entry(hass, settings)
+        hass.config_entries.async_update_entry(settings, version=2)
+        print("PASS the Herald settings entry migrates to version 2 unchanged")
         manager = hass.config_entries.options
 
         async def branch(name):
@@ -221,6 +330,60 @@ async def exercise(hass, a, b, root):
         print("PASS the default voice can be cleared without configuring speakers")
     finally:
         logging.getLogger().removeHandler(handler)
+        await stack.aclose()
+
+
+async def migration_checks(hass, entry, box, plain):
+    from custom_components.herald import async_migrate_entry
+    from custom_components.herald.client import HeraldClient
+
+    manager = hass.config_entries
+    await manager.async_unload(entry.entry_id)
+    legacy = {k: v for k, v in entry.data.items() if k != "cert_sha256"}
+    manager.async_update_entry(entry, version=1, data={**legacy, "port": plain.port})
+    assert await async_migrate_entry(hass, entry)
+    assert entry.version == 2 and entry.data["cert_sha256"] is None
+    assert plain.request_count == 0
+    await manager.async_setup(entry.entry_id)
+    assert entry.state.value == "setup_retry" and entry.data["cert_sha256"] is None
+    assert plain.request_count == 0
+    print("PASS a plain-HTTP 0.2 box leaves the entry not ready")
+
+    manager.async_update_entry(entry, data={**legacy, "cert_sha256": None})
+    request = HeraldClient.request
+    info_calls = []
+
+    async def observe(client, method, path, *args, **kwargs):
+        if path == "info":
+            assert entry.data["cert_sha256"] is None and client.token is None
+            info_calls.append(
+                client.fingerprint.fingerprint.hex() if client.fingerprint else None
+            )
+        return await request(client, method, path, *args, **kwargs)
+
+    # A claimed pin must survive a real handshake before HA saves it.
+    box.next["GET", "info"] = (
+        200,
+        {
+            "ok": True,
+            "app": "herald",
+            "api": 2,
+            "id": entry.unique_id,
+            "cert_sha256": "00" * 32,
+        },
+    )
+    requests = box.request_count
+    await manager.async_reload(entry.entry_id)
+    assert entry.state.value == "setup_retry" and entry.data["cert_sha256"] is None
+    assert box.request_count == requests + 1
+    with patch.object(HeraldClient, "request", observe):
+        await manager.async_reload(entry.entry_id)
+    assert info_calls == [None, box.cert_sha256] and entry.state.value == "loaded"
+    assert dict(entry.data) == {**legacy, "cert_sha256": box.cert_sha256}
+    assert not box.public_auth_seen
+    print(
+        "PASS a migrated 0.2 entry confirms the pin on a second TLS request before saving it"
+    )
 
 
 if __name__ == "__main__":

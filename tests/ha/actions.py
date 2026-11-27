@@ -479,6 +479,45 @@ async def exercise(hass, a, b, root):
         "PASS a spoken show_card to a box without announce support is reported unsupported"
     )
 
+    a.settings["ntfy"] = {"token": a.token, "token_set": True, "topics": []}
+    await x.snapshot()
+    assert x.snapshots[-1]["settings"]["ntfy"] == {"topics": []}
+    stored = await x.store.async_load()
+    assert stored[-1]["settings"]["ntfy"] == {"topics": []}
+    print("PASS settings snapshots drop the ntfy token")
+
+    from custom_components.herald.client import ApiError, HeraldClient
+
+    bootstrap = HeraldClient(hass, "127.0.0.1", b.port, token=b.token)
+    await bootstrap.request("GET", "info")
+    assert not b.public_auth_seen
+    requests = b.request_count
+    for method, path in (("GET", "status"), ("POST", "pair/start")):
+        try:
+            await bootstrap.request(method, path)
+        except ApiError:
+            pass
+        else:
+            raise AssertionError("unpinned request accepted")
+    assert b.request_count == requests
+    await b.rotate_certificate()
+    requests = b.request_count
+    for method, path in (
+        ("GET", "status"),
+        ("GET", "events"),
+        ("POST", "cards"),
+        ("PUT", "settings"),
+        ("DELETE", "clients/self"),
+    ):
+        try:
+            await y.client.request(method, path)
+        except ApiError as exc:
+            assert exc.status == 0 and exc.error == "certificate changed"
+        else:
+            raise AssertionError("rotated certificate accepted")
+    assert b.request_count == requests
+    print("PASS every request after pairing uses the pinned certificate")
+
 
 if __name__ == "__main__":
     run(exercise)

@@ -141,6 +141,12 @@ quiet() {
         loads=$(cut -d' ' -f1-3 /proc/loadavg)
         available=$(free -g | awk '/^Mem:/ {print $7}')
         containers=$(d ps --no-trunc --format '{{.Names}} {{.Image}} {{.Command}}')
+        # tools/adb.sh runs a persistent ADB daemon from the build image. Verify
+        # its process list before omitting that idle daemon from the workload scan.
+        if [[ $containers == *herald-adb* ]] &&
+           [[ $(d top herald-adb -eo pid,comm 2>/dev/null | awk 'NR>1 {print $2}') == adb ]]; then
+            containers=$(sed '/^herald-adb herald-build:[^ ]* .*adb -P 5038 nodaemon server"$/d' <<<"$containers")
+        fi
         processes=$(ps -eo comm,args)
         if awk -v ram="$available" '{exit !(NF==3 && $1<8 && $2<8 && $3<8 && ram>=8)}' <<<"$loads" &&
            ! grep -Eiq '(^|[ /:_-])(build|test|tests|pytest|bats|herald-emu)([ /:_-]|$)' <<<"$containers" &&
@@ -220,13 +226,20 @@ fi
 printf 'Emulator revision %s, android-36 android-tv x86_64 revision %s, renderer %s.\n\n' \
     "$emu_revision" "$tv_revision" "$renderer" >> "$evidence"
 { printf '%s\n' "$reader_py"; cat <<'PY'; } | d exec -i "$cid" python3 - "/apk/${apk#"$root/out/"}" >>"$evidence"
+import base64
 import hashlib
+import http.client
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import io
 import json
 import os
 from pathlib import Path
 import re
 import shlex
+import signal
+import socket
+import threading
+import ssl
 import subprocess
 import sys
 import tempfile
@@ -256,16 +269,50 @@ def command(args, data=None, timeout=30):
 def shell(*args):
     return command(adb + ["shell", shlex.join(args)]).decode().strip()
 
+cert_sha256 = None
+
+def certificate_digests(peer):
+    der = command(["openssl", "x509", "-outform", "DER"], peer)
+    pub = command(["openssl", "x509", "-pubkey", "-noout"], peer)
+    spki = command(["openssl", "pkey", "-pubin", "-outform", "DER"], pub)
+    fingerprint = hashlib.sha256(der).hexdigest()
+    pin = base64.b64encode(hashlib.sha256(spki).digest()).decode()
+    return fingerprint, pin
+
+def bootstrap():
+    global cert_sha256
+    require(not auth.exists() and cert_sha256 is None, "bootstrap requires a fresh client")
+    raw = command(["curl", "-q", "--noproxy", "*", "--insecure", "--silent", "--fail",
+                   "--max-time", "8", "https://127.0.0.1:7979/v1/info"])
+    info = json.loads(raw)
+    peer = command(["openssl", "s_client", "-connect", "127.0.0.1:7979"], b"", timeout=8)
+    fingerprint, pin = certificate_digests(peer)
+    require(fingerprint == info.get("cert_sha256") and pin == info.get("pin_sha256"),
+            "certificate mismatch")
+    cert_sha256 = fingerprint
+    return info
+
 def request(path, method="GET", body=None):
-    args = ["curl", "--noproxy", "*", "--silent", "--show-error", "--max-time", "8",
-            "--fail", "-X", method, "http://127.0.0.1:7979/v1/" + path]
-    if auth.exists():
-        args += ["-H", "@" + str(auth)]
-    if body is not None:
-        args += ["--json", "@-"]
-    result = json.loads(command(args, json.dumps(body).encode() if body is not None else None))
-    require(result.get("ok") is True, f"{path} response missing ok")
-    return result
+    require(cert_sha256 is not None, "certificate mismatch")
+    conn = http.client.HTTPSConnection("127.0.0.1", 7979, timeout=8,
+                                       context=ssl._create_unverified_context())
+    try:
+        conn.connect()
+        require(hashlib.sha256(conn.sock.getpeercert(binary_form=True)).hexdigest() == cert_sha256,
+                "certificate mismatch")
+        headers = {}
+        if auth.exists():
+            headers["Authorization"] = auth.read_text().strip().split(": ", 1)[1]
+        if body is not None:
+            headers["Content-Type"] = "application/json"
+        conn.request(method, "/v1/" + path, json.dumps(body) if body is not None else None, headers)
+        reply = conn.getresponse()
+        require(reply.status == 200, f"{path} HTTP {reply.status}")
+        result = json.loads(reply.read())
+        require(result.get("ok") is True, f"{path} response missing ok")
+        return result
+    finally:
+        conn.close()
 
 def key(name):
     shell("input", "keyevent", "KEYCODE_" + name)
@@ -299,17 +346,41 @@ def install():
     shell("appops", "set", pkg, "SYSTEM_ALERT_WINDOW", "allow")
     require("allow" in shell("appops", "get", pkg, "SYSTEM_ALERT_WINDOW"), "overlay grant missing")
     key("WAKEUP")
-    shell("am", "start-foreground-service", "-n", pkg + "/.HeraldService")
-    for attempt in range(15):
-        try:
-            info = request("info")
-            break
-        except ReadingError:
-            if attempt == 14:
-                raise
-            time.sleep(1)
-    require(info.get("app") == "herald" and info.get("api") == 1, "unexpected info identity")
-    return f"API 36 TV, APK installed, overlay allowed, /v1/info herald {info['version']} API 1"
+    info = enable_receiving()
+    return f"API 36 TV, APK installed, overlay allowed, headless enable, /v1/info herald {info['version']} API 2"
+
+def enable_receiving():
+    start_settings()
+    result = shell("am", "broadcast", "-a", pkg + ".action.ENABLE_RECEIVING", "-n", pkg + "/.ShellReceiver")
+    require("result=-1" in result, "start refused")
+
+    return wait_info()
+
+def wait_info():
+    def expired(signum, frame):
+        raise ReadingError("Herald did not start; the saved choice is On (switch it off in Setup to stop retrying)")
+
+    previous = signal.signal(signal.SIGALRM, expired)
+    signal.alarm(20)
+    try:
+        while True:
+            try:
+                if cert_sha256 is None:
+                    bootstrap()
+                info = request("info")
+                break
+            except ReadingError as error:
+                if not str(error).startswith(("curl exited", "openssl exited")):
+                    raise
+            except (OSError, http.client.HTTPException, subprocess.TimeoutExpired):
+                pass
+            time.sleep(0.25)
+    finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, previous)
+    require(info.get("app") == "herald" and info.get("api") == 2, "unexpected info identity")
+    require(info.get("cert_sha256") == cert_sha256, "reported certificate changed")
+    return info
 
 def pair():
     # Open a static screen, keep a before frame, then read two fresh code frames >= 1 s apart.
@@ -334,7 +405,8 @@ def pair():
     require(isinstance(reply.get("token"), str) and reply["token"], "finish missing token")
     auth.write_text("Authorization: Bearer " + reply["token"] + "\n")
     time.sleep(5.2)  # paired confirmation overlay
-    return request("status")
+    require(request("status").get("api") == 2, "pinned status missing API 2")
+    return "two matching OCR reads, paired client authorized at pinned /v1/status"
 
 def bounds(node):
     values = re.fullmatch(r"\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\]", node.get("bounds", ""))
@@ -383,11 +455,18 @@ def focused():
     require(len(matches) == 1, "missing unique focused Herald control")
     return matches[0]
 
+def move_down_to(label):
+    for step in range(13):
+        if focused() == label:
+            return
+        if step < 12:
+            key("DPAD_DOWN")
+    raise ReadingError(f"did not reach {label} within 12 presses")
+
 def navigation():
     start_settings()
-    require(focused() == "Looks", "Looks section did not receive focus")
-    key("DPAD_DOWN")
-    require(focused() == "Categories", "Categories section did not receive focus")
+    require(focused() == "Setup", "Setup section did not receive focus")
+    move_down_to("Categories")
     key("DPAD_RIGHT")
     first = focused()
     require(re.search(r" \([a-z0-9_]+\)$", first), "category list focus missing")
@@ -440,6 +519,145 @@ def render():
     require("copper lantern" in words and "silver bell" in words, "card and chip text not both visible in screencap")
     return f"same {frame.width}×{frame.height} screencap contains Copper Lantern and Silver Bell, SHA-256 {hashlib.sha256(png).hexdigest()}"
 
+def tls():
+    info = request("info")
+    for flag in ("-tls1_2", "-tls1_3"):  # Both supported by the API 36 image.
+        peer = command(["openssl", "s_client", flag, "-connect", "127.0.0.1:7979"], b"", timeout=8)
+        require(certificate_digests(peer) == (cert_sha256, info["pin_sha256"]),
+                "forced handshake digest mismatch")
+    with socket.create_connection(("127.0.0.1", 7979), timeout=8) as plain:
+        plain.sendall(b"GET /v1/info HTTP/1.0\r\n\r\n")
+        try:
+            first = plain.recv(1)
+        except ConnectionResetError:
+            first = b""
+        require(first in (b"", b"\x15"), "plain request received an unexpected reply")
+    shell("am", "force-stop", pkg)
+    enable_receiving()  # Keeps the existing DER pin.
+    return "TLS 1.2 and 1.3, DER and SPKI match, no plain HTTP reply, force-stop and enable retained fingerprint"
+
+def listener_closed():
+    start = time.monotonic()
+    for index in range(16):
+        time.sleep(max(0, start + index * 2 - time.monotonic()))
+        for table in ("tcp", "tcp6"):
+            rows = shell("cat", "/proc/net/" + table).splitlines()
+            require(rows and rows[0].split()[:4] in (["sl", "local_address", "rem_address", "st"],
+                                                      ["sl", "local_address", "remote_address", "st"]),
+                    f"missing {table} header at sample {index + 1}")
+            for row in rows[1:]:
+                fields = row.split()
+                require(len(fields) >= 4, f"malformed {table} row")
+                require(not (fields[1].upper().endswith(":1F2B") and fields[3] == "0A"),
+                        f"{table} shows LISTEN on 7979 at sample {index + 1}")
+
+def fresh_state():
+    global cert_sha256
+    original = cert_sha256
+    require(shell("pm", "clear", pkg) == "Success", "pm clear failed")
+    auth.unlink()
+    cert_sha256 = None
+    shell("appops", "set", pkg, "SYSTEM_ALERT_WINDOW", "allow")
+    start_settings()
+    require(focused() == "Setup", "fresh install did not open Setup")
+    listener_closed()
+    enable_receiving()
+    require(cert_sha256 != original, "pm clear retained the old identity")
+    pair()
+    return "pm clear, client credentials dropped, Setup, tcp/tcp6 closed for 30 s, enabled, new identity pinned and paired"
+
+def reboot():
+    boot_id = shell("cat", "/proc/sys/kernel/random/boot_id")
+    require(bool(boot_id), "missing original boot ID")
+    command(adb + ["reboot"])
+    deadline = time.monotonic() + 600
+    while time.monotonic() < deadline:
+        try:
+            if (shell("getprop", "sys.boot_completed") == "1"
+                    and shell("cat", "/proc/sys/kernel/random/boot_id") not in ("", boot_id)):
+                break
+        except (ReadingError, subprocess.TimeoutExpired):
+            pass
+        time.sleep(2)
+    else:
+        raise ReadingError("new boot did not complete")
+    command(adb + ["forward", "tcp:7979", "tcp:7979"])
+    mappings = command(adb + ["forward", "--list"]).decode().splitlines()
+    require(any(line.split() == [adb[2], "tcp:7979", "tcp:7979"] for line in mappings),
+            "7979 forward missing after reboot")
+
+def stop_receiving():
+    start_settings()
+    require(focused() == "Setup", "Stop requires Setup")
+    key("DPAD_RIGHT")
+    move_down_to("Stop receiving")
+    key("DPAD_CENTER")
+    require(any(n.get("text", "").split() == ["Receiving", "Off"] for n in ui().iter("node")),
+            "Setup did not show Receiving Off")
+
+def boot_checks():
+    reboot()
+    wait_info()
+    stop_receiving()
+    reboot()
+    listener_closed()
+    enable_receiving()
+    return "On reboot retained pin, both new boots completed with verified forwards, Off tcp/tcp6 closed for 30 s, enabled again"
+
+def ntfy():
+    delivered = threading.Event()
+    stop = threading.Event()
+    class Stream(BaseHTTPRequestHandler):
+        def log_message(self, *args):
+            pass
+
+        def do_GET(self):
+            if self.path.split("?", 1)[0] != "/emulator/json":
+                self.send_error(404)
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", "application/x-ndjson")
+            self.end_headers()
+            if not delivered.is_set():
+                event = {"event": "message", "id": "test1", "topic": "emulator",
+                         "time": int(time.time()), "message": "Parcel received"}
+                self.wfile.write(json.dumps(event).encode() + b"\n")
+                delivered.set()
+            while not stop.wait(1):
+                self.wfile.write(b'{"event":"keepalive"}\n')
+
+    key("HOME")
+    address = socket.gethostbyname(socket.gethostname())
+    with ThreadingHTTPServer((address, 0), Stream) as server:
+        thread = threading.Thread(target=server.serve_forever)
+        thread.start()
+        try:
+            request("settings", "PUT", {"ntfy": {"enabled": True, "server": f"http://{address}:{server.server_port}",
+                    "topics": [{"topic": "emulator", "label": "Amber Parcel", "look": "classic"}]}})
+            require(delivered.wait(20), "no ntfy subscription reached the fake server")
+            for _ in range(8):
+                _, frame = screenshot()
+                if "amber parcel" in " ".join(ocr(frame, 11).lower().split()):
+                    return "one untitled ntfy message, mapped topic label Amber Parcel visible in screencap"
+                time.sleep(0.5)
+            raise ReadingError("mapped ntfy title absent from screencap")
+        finally:
+            stop.set()
+            server.shutdown()
+            thread.join()
+            request("settings", "PUT", {"ntfy": {"enabled": False}})
+
+def update():
+    def replace():
+        require(b"Success" in command(adb + ["install", "-r", "/apk/herald-universal.apk"], timeout=120),
+                "universal APK update failed")
+    replace()
+    wait_info()  # No launch or enable after replacement. The post-clear pin remains active.
+    stop_receiving()
+    replace()
+    listener_closed()
+    return "universal APK installed twice, On answered within 20 s with post-clear pin, Off tcp/tcp6 closed for 30 s"
+
 failures = []
 def check(k, fn):
     try:
@@ -453,22 +671,25 @@ def check(k, fn):
     print(f"- {k} — {reading} (exit 0) — pass", flush=True)
     return True
 
-installed = check("E01", install)
-paired = False
-if installed:
-    try:
-        pair()
-        paired = True
-    except Exception as exc:
-        print("Pairing prerequisite failed: " + (str(exc) if isinstance(exc, ReadingError) else type(exc).__name__), flush=True)
-for k, fn, ready in [("E02", lambda: card_back(False), paired),
-                     ("E03", lambda: card_back(True), paired),
-                     ("E04", navigation, installed), ("E05", insets, installed), ("E06", render, paired)]:
+def when(ready, k, fn):
     if ready:
-        check(k, fn)
-    else:
-        print(f"- {k} — prerequisite failed (no exit code) — n/a", flush=True)
-        failures.append(k)
+        return check(k, fn)
+    print(f"- {k} — prerequisite failed (no exit code) — n/a", flush=True)
+    failures.append(k)
+    return False
+
+installed = check("E01", install)
+secure = when(installed, "E07", tls)
+paired = when(secure, "E08", pair)
+when(paired, "E02", lambda: card_back(False))
+when(paired, "E03", lambda: card_back(True))
+when(installed, "E04", navigation)
+when(installed, "E05", insets)
+when(paired, "E06", render)
+fresh = when(paired, "E09", fresh_state)
+enabled = when(fresh, "E10", boot_checks)
+when(enabled, "E11", ntfy)
+when(enabled, "E12", update)
 private.cleanup()
 sys.exit(int(bool(failures)))
 PY

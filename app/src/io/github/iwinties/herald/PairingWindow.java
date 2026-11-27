@@ -71,7 +71,7 @@ final class PairingWindow {
         View progress;
         long end;
 
-        Panel(PairingText.Layout layout, int sh, String client, String code, String deviceName, int seconds) {
+        Panel(PairingText.Layout layout, int sh, String client, String code, String deviceName, int seconds, String fingerprint) {
             super(context);
             this.sh = sh;
             this.seconds = seconds;
@@ -103,6 +103,8 @@ final class PairingWindow {
                     Typeface.DEFAULT_BOLD), layout.titleY, 45);
             if (paired) return;
             line(label("Enter this code in " + client, 18, 0xbfffffff, Typeface.DEFAULT), layout.subtitleY, 30);
+            line(label("Fingerprint " + TlsIdentity.grouped(fingerprint), 15, Color.WHITE, Typeface.MONOSPACE),
+                    layout.subtitleY + px(sh, 30), 23);
             String groups = PairingText.groups(code);
             for (int i = 0; i < layout.boxes.length; i++) {
                 int[] box = layout.boxes[i];
@@ -153,20 +155,20 @@ final class PairingWindow {
         }
     }
 
-    boolean showCode(String client, String code, String deviceName, int seconds) {
-        return show(client, code, deviceName, seconds);
+    boolean showCode(String client, String code, String deviceName, int seconds, String fingerprint) {
+        return show(client, code, deviceName, seconds, fingerprint);
     }
 
-    void showPaired(String client) { show(client, null, null, 5); }
+    void showPaired(String client) { show(client, null, null, 5, null); }
 
-    private boolean show(String client, String code, String deviceName, int seconds) {
+    private boolean show(String client, String code, String deviceName, int seconds, String fingerprint) {
         FutureTask<Boolean> task = new FutureTask<>(() -> {
             remove();
             Point size = new Point();
             windows.getDefaultDisplay().getRealSize(size);
             PairingText.Layout layout = PairingText.layout(size.x, size.y);
             int[] window = layout.window;
-            Panel panel = new Panel(layout, size.y, client, code, deviceName, seconds);
+            Panel panel = new Panel(layout, size.y, client, code, deviceName, seconds, fingerprint);
             WindowManager.LayoutParams params = new WindowManager.LayoutParams(
                     window[2] - window[0], window[3] - window[1],
                     WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,

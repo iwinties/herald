@@ -7,6 +7,7 @@ import android.graphics.Canvas;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.StateListDrawable;
+import android.net.Uri;
 import android.net.ConnectivityManager;
 import android.net.LinkAddress;
 import android.net.LinkProperties;
@@ -42,19 +43,23 @@ import java.util.function.IntConsumer;
 /** Local, D-pad-operated controls. The service owns all settings and pairing state. */
 public final class SettingsActivity extends Activity {
     private static final int TEXT = 0xffe8ecf2, MUTED = 0xff93a0b4, BLUE = 0xff3ba3e0;
-    private static final String[] SUBTITLES = {"Select a look to send a test card. Hold OK to use it for a category.", "Card settings by category",
+    private static final String[] SUBTITLES = {"Set up Herald with the remote", "Select a look to send a test card. Hold OK to use it for a category.", "Card settings by category",
             "Card and chip display settings", "Output levels and audio tests", "Manage paired clients",
-            "Broker connection settings", "TvOverlay settings", "Live service and device status",
+            "Broker connection settings", "Topic subscriptions", "TvOverlay settings", "Live service and device status",
             "Device information and diagnostics"};
     private static final String COLORS = "#4FC3F7 #FFB74D #81C784 #E57373 #BA68C8 #FFF176 #90A4AE #B0BEC5 #4DB6AC #F06292 #000000 #FFFFFF";
     private final Handler main = new Handler(android.os.Looper.getMainLooper());
     private final List<Button> tabs = new ArrayList<>();
     private LinearLayout rows;
-    private TextView pairingStatus;
+    private TextView ntfyStatus;
+    private TextView pairingStatus, pairingFingerprint;
     private final List<TextView> statusViews = new ArrayList<>();
     private int statusStart;
     private long nextStatus;
     private boolean started;
+    private boolean receiving;
+    private String receivingStatus;
+    private TestCard testCard;
     private HeraldService service;
     private int section;
     private boolean rendering;
@@ -65,6 +70,7 @@ public final class SettingsActivity extends Activity {
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
+        receiving = HeraldService.receiving(this);
         section = state == null ? 0 : state.getInt("section", 0);
         LinearLayout frame = new LinearLayout(this);
         frame.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
@@ -137,12 +143,17 @@ public final class SettingsActivity extends Activity {
     @Override public void onStart() {
         super.onStart();
         started = true;
-        if (HeraldService.instance() == null) startForegroundService(new Intent(this, HeraldService.class));
         poll.run();
+    }
+
+    @Override public void onResume() {
+        super.onResume();
+        render(rows.indexOfChild(rows.getFocusedChild()));
     }
 
     @Override public void onStop() {
         started = false;
+        if (testCard != null) testCard.dismiss();
         if (pairingStatus != null) pairingStatus.setText("");
         secureCode(false);
         main.removeCallbacks(poll);
@@ -152,15 +163,22 @@ public final class SettingsActivity extends Activity {
     private final Runnable poll = new Runnable() {
         public void run() {
             HeraldService current = HeraldService.instance();
-            if (current != service) {
+            boolean on = HeraldService.receiving(SettingsActivity.this);
+            boolean error = HeraldService.startRefused || getSharedPreferences("herald", MODE_PRIVATE).getBoolean("start_error", false);
+            String status = Setup.receivingStatus(on, HeraldService.startPending, error);
+            if (current != service || on != receiving || !status.equals(receivingStatus)) {
+                int focused = rows.indexOfChild(rows.getFocusedChild());
+                receiving = on;
+                receivingStatus = status;
                 service = current;
-                render(-1);
+                render(focused);
             }
             if (service != null && pairingStatus != null) {
                 String paired = service.auth().pairedName();
                 if (!java.util.Objects.equals(paired, lastPairing)) render(rows.hasFocus() ? 1 : -1);
                 else updatePairing();
             }
+            if (service != null && ntfyStatus != null) ntfyStatus.setText("Status    " + service.ntfyStatus());
             if (!statusViews.isEmpty() && android.os.SystemClock.uptimeMillis() >= nextStatus) refreshStatus();
             main.postDelayed(this, 250);
         }
@@ -168,6 +186,7 @@ public final class SettingsActivity extends Activity {
 
     @Override public void onBackPressed() { back(); }
     private void back() {
+        if (testCard != null && testCard.dismiss()) return;
         if (pickingLook) {
             pickingLook = false;
             render(0);
@@ -301,13 +320,17 @@ public final class SettingsActivity extends Activity {
 
     private void populate(int focus) {
         rows.removeAllViews();
+        ntfyStatus = null;
         pairingStatus = null;
         statusViews.clear();
         String name = SettingsModel.SECTIONS.get(section);
         heading(rows, name, .034f, TEXT, true);
         heading(rows, SUBTITLES[section], .018f, MUTED, false);
-        if (service == null) { secureCode(false); line("Starting Herald…"); return; }
-        switch (name) {
+        if (!Setup.available(name, receiving)) line("Start receiving to change this.");
+        else if ("Setup".equals(name)) setup();
+        else if ("About".equals(name)) diagnostics();
+        else if (service == null) line("On".equals(receivingStatus) ? "Open Setup to start receiving." : receivingStatus);
+        else switch (name) {
             case "Looks":
                 if (editingLook == null) lookGrid();
                 else customLook();
@@ -322,9 +345,9 @@ public final class SettingsActivity extends Activity {
                 break;
             case "Pairing & clients": pairing(); break;
             case "MQTT": group("mqtt"); break;
+            case "ntfy": ntfy(); break;
             case "Compatibility": compatibility(); break;
             case "Status": statusStart = rows.getChildCount(); refreshStatus(); break;
-            case "About": diagnostics(); break;
         }
         if (pairingStatus == null) secureCode(false);
         if (focus >= 0) {
@@ -588,6 +611,68 @@ public final class SettingsActivity extends Activity {
         }
     }
 
+    private void ntfySetting(String key, Object value) {
+        service.changeSettings(Json.fields("ntfy", Json.fields(key, value)));
+    }
+
+    private void ntfy() {
+        Settings settings = service.settings();
+        Map<String,Object> group = Settings.object(settings.document().get("ntfy"), "ntfy");
+        field("Enabled", group.get("enabled"), value -> ntfySetting("enabled", value));
+        field("Server", group.get("server"), value -> ntfySetting("server", value));
+        boolean hasToken = Boolean.TRUE.equals(group.get("token_set"));
+        action("Token    " + (hasToken ? "set" : "unset"), () -> edit("Token", "", true, value -> {
+            synchronized (settings) {
+                if (!group.get("server").equals(settings.ntfyPrivate().get("server"))) {
+                    feedback("Server changed. Reopen Token to enter it for the new server.");
+                } else ntfySetting("token", value);
+            }
+            render(0);
+        }));
+        if (hasToken) action("Clear token", () -> { ntfySetting("token", null); render(0); });
+        field("Catch-up (seconds)", group.get("catch_up"), value -> ntfySetting("catch_up", value));
+        ntfyStatus = line("Status    " + service.ntfyStatus());
+        List<Object> categories = new ArrayList<>(), looks = new ArrayList<>();
+        looks.add("Use category look");
+        for (Map<String,Object> row : settings.categories()) categories.add(row.get("id"));
+        for (Map<String,Object> row : settings.looks()) looks.add(row.get("id"));
+        for (Map<String,Object> topic : Settings.topics(group)) {
+            String name = (String)topic.get("topic");
+            field("Topic", name, value -> editTopic(name, "topic", value));
+            field("Label", topic.get("label"), value -> editTopic(name, "label", value));
+            field("Category", topic.get("category"), value -> editTopic(name, "category", value), categories);
+            Object look = topic.get("look");
+            field("Look", look == null ? looks.get(0) : look,
+                    value -> editTopic(name, "look", value.equals(looks.get(0)) ? null : value), looks);
+            field("Speak priority 5", topic.get("speak"), value -> editTopic(name, "speak", value));
+            action("Remove topic", () -> { editTopic(name, null, null); render(0); });
+        }
+        if (Settings.topics(group).size() < 4) action("Add topic", () -> edit("Topic", "", false, name -> {
+            editTopic(null, "topic", name);
+            render(0);
+        }));
+    }
+
+    private void editTopic(String name, String key, Object value) {
+        Settings settings = service.settings();
+        synchronized (settings) {
+            List<Map<String,Object>> list = new ArrayList<>(Settings.topics(settings.ntfyPrivate()));
+            if (name == null) list.add(Json.fields(key, value));
+            else {
+                int i = 0;
+                while (i < list.size() && !name.equals(list.get(i).get("topic"))) i++;
+                if (i == list.size()) { feedback("Topic changed"); return; }
+                if (key == null) list.remove(i);
+                else {
+                    Map<String,Object> row = new LinkedHashMap<>(list.get(i));
+                    row.put(key, value);
+                    list.set(i, row);
+                }
+            }
+            ntfySetting("topics", list);
+        }
+    }
+
     private void compatibility() {
         Settings settings = service.settings();
         Map<String,Object> cfg = Compat.config(settings.document());
@@ -623,6 +708,7 @@ public final class SettingsActivity extends Activity {
         action("Pair a new client", () -> { auth.startTv(); updatePairing(); });
         pairingStatus = line("");
         pairingStatus.setSaveEnabled(false);
+        pairingFingerprint = line("");
         lastPairing = auth.pairedName();
         updatePairing();
         for (Auth.Client c : auth.localClients())
@@ -633,7 +719,11 @@ public final class SettingsActivity extends Activity {
         String code = started ? auth.tvCode() : null, paired = auth.pairedName();
         // A TV-started code stays valid until it times out, also after leaving this screen (operator, D23).
         if (code != null) secureCode(true);
-        pairingStatus.setText(code != null ? "Pairing code  " + code : paired == null ? "" : "Paired with " + paired);
+        String fingerprint = service.certSha256();
+        String identity = fingerprint.isEmpty() ? "" : "Fingerprint " + TlsIdentity.grouped(fingerprint);
+        String state = code != null ? "Pairing code  " + code : paired == null ? "" : "Paired with " + paired;
+        pairingStatus.setText(state);
+        if (!identity.contentEquals(pairingFingerprint.getText())) pairingFingerprint.setText(identity);
         if (code == null) secureCode(false);
     }
     private void secureCode(boolean secure) {
@@ -679,9 +769,74 @@ public final class SettingsActivity extends Activity {
         nextStatus = android.os.SystemClock.uptimeMillis() + 1000;
     }
 
+    private void setup() {
+        boolean overlay = android.provider.Settings.canDrawOverlays(this);
+        boolean exempt = getSystemService(PowerManager.class).isIgnoringBatteryOptimizations(getPackageName());
+        Uri pkg = Uri.parse("package:" + getPackageName());
+        Intent plain = new Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION);
+        Intent specific = new Intent(plain).setData(pkg);
+        Intent details = new Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, pkg);
+        Intent battery = new Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS);
+        Setup.Target target = Setup.overlayTarget(resolves(specific), resolves(plain), resolves(details));
+        Intent overlayIntent = target == Setup.Target.PACKAGE_OVERLAY ? specific
+                : target == Setup.Target.OVERLAY ? plain : target == Setup.Target.APP_DETAILS ? details : null;
+        permissionRow("Show cards over other apps", overlay, overlayIntent, Setup.OVERLAY_ADB);
+        permissionRow("Battery (optional)", exempt,
+                Setup.batteryTarget(resolves(battery)) == Setup.Target.BATTERY ? battery : null, Setup.BATTERY_ADB);
+        action("Test card    " + Setup.testCardStatus(overlay), () -> {
+            if (!android.provider.Settings.canDrawOverlays(this)) { feedback("Needs row 1"); return; }
+            if (testCard != null) testCard.dismiss();
+            testCard = TestCard.show(this);
+        });
+        line("Receiving    " + receivingStatus);
+        if (!receiving || (service == null && !HeraldService.startPending)) {
+            action("Start receiving", () -> {
+                HeraldService.requestStart(this, HeraldService.receiving(this));
+                refreshSetup();
+            });
+        }
+        if (receiving) action("Stop receiving", () -> {
+            getSharedPreferences("herald", MODE_PRIVATE).edit().putBoolean("receiving", false).remove("start_error").commit();
+            HeraldService.startRefused = false;
+            HeraldService.startPending = false;
+            if (HeraldService.instance() != null) startService(new Intent(this, HeraldService.class).setAction(HeraldService.STOP));
+            refreshSetup();
+        });
+        privacyRow();
+    }
+
+    private void refreshSetup() {
+        main.removeCallbacks(poll);
+        poll.run();
+    }
+
+    private boolean resolves(Intent intent) { return intent.resolveActivity(getPackageManager()) != null; }
+
+    private void permissionRow(String label, boolean granted, Intent intent, String fallback) {
+        String title = label + "    " + Setup.grantStatus(granted);
+        Button row = button(rows, title);
+        row.setOnClickListener(v -> {
+            if (intent != null) {
+                try { startActivity(intent); return; }
+                catch (android.content.ActivityNotFoundException unavailable) { /* Show the ADB instructions. */ }
+            }
+            row.setSingleLine(false);
+            row.setText(title + "\n" + fallback);
+            row.getLayoutParams().height = LinearLayout.LayoutParams.WRAP_CONTENT;
+            row.requestLayout();
+        });
+    }
+
+    private void privacyRow() {
+        action("Privacy", () -> new AlertDialog.Builder(this).setTitle("Privacy").setMessage(Setup.PRIVACY)
+                .setPositiveButton("Close", null).show());
+    }
+
     private void diagnostics() {
-        group("device");
         line("Herald " + HeraldService.VERSION);
+        privacyRow();
+        if (!receiving || service == null) return;
+        group("device");
         line("Device ID  " + service.deviceId());
         List<String> addresses = addresses();
         if (addresses.isEmpty()) line("No active network");
@@ -689,10 +844,8 @@ public final class SettingsActivity extends Activity {
         if (service.assignedName() != null) line("Discovery name  " + service.assignedName());
         boolean overlay = service.overlayAllowed();
         line("Overlay permission  " + (overlay ? "allowed" : "missing"));
-        if (!overlay) line("adb shell appops set io.github.iwinties.herald SYSTEM_ALERT_WINDOW allow");
         boolean exempt = getSystemService(PowerManager.class).isIgnoringBatteryOptimizations(getPackageName());
         line("Battery exemption  " + (exempt ? "allowed" : "missing"));
-        if (!exempt) line("adb shell dumpsys deviceidle whitelist +io.github.iwinties.herald");
         line("Media3  " + Libs.media3());
         EventLog log = service.events();
         List<?> recent = (List<?>)log.await(Math.max(0, log.latest()-20), 0).get("events");

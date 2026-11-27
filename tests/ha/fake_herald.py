@@ -1,17 +1,25 @@
 """Loopback Herald transport and the shared native Home Assistant test harness."""
 
 import asyncio
+import base64
+import hashlib
 import re
 import secrets
 import shutil
+import ssl
 import tempfile
 import time
 from contextlib import AsyncExitStack, asynccontextmanager
 from copy import deepcopy
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import uuid4
 
 from aiohttp import web
+from cryptography import x509
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.x509.oid import NameOID
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -49,10 +57,49 @@ GENERAL_STYLE = {
 }
 
 
+def tls_identity():
+    key = ec.generate_private_key(ec.SECP256R1())
+    name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "Herald fixture")])
+    now = datetime.now(UTC)
+    cert = (
+        x509.CertificateBuilder()
+        .subject_name(name)
+        .issuer_name(name)
+        .public_key(key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(now - timedelta(days=1))
+        .not_valid_after(now + timedelta(days=1))
+        .sign(key, hashes.SHA256())
+    )
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    with tempfile.TemporaryDirectory() as directory:
+        path = Path(directory) / "fixture.pem"
+        path.write_bytes(
+            cert.public_bytes(serialization.Encoding.PEM)
+            + key.private_bytes(
+                serialization.Encoding.PEM,
+                serialization.PrivateFormat.PKCS8,
+                serialization.NoEncryption(),
+            )
+        )
+        context.load_cert_chain(path)
+    spki = key.public_key().public_bytes(
+        serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo
+    )
+    return (
+        context,
+        cert.fingerprint(hashes.SHA256()).hex(),
+        base64.b64encode(hashlib.sha256(spki).digest()).decode("ascii"),
+    )
+
+
 class FakeHerald:
-    def __init__(self, name):
+    def __init__(self, name, *, plain=False, identity=None):
         self.name = name
-        self.identity = str(uuid4())
+        self.identity = identity.identity if identity else str(uuid4())
+        self.plain = plain
+        self.tls = identity.tls if identity else None
+        self.request_count = 0
         self.token = "SENTINEL-TOKEN"
         self.code = str(secrets.randbelow(1000000)).zfill(6)
         self.stream = secrets.token_hex(8)
@@ -109,12 +156,23 @@ class FakeHerald:
         self.pairing = False
         self.authenticated = True
 
-    async def start(self):
+    async def close(self):
+        await self.runner.cleanup()
+
+    async def rotate_certificate(self):
+        await self.close()
+        self.tls = None
+        await self.start(self.port)
+
+    async def start(self, port=0):
+        if not self.plain and self.tls is None:
+            self.tls = await asyncio.to_thread(tls_identity)
+        context, self.cert_sha256, self.pin_sha256 = self.tls or (None, None, None)
         app = web.Application(client_max_size=4194305)
         app.router.add_route("*", "/v1/{tail:.*}", self.handle)
         self.runner = web.AppRunner(app, access_log=None, shutdown_timeout=0.1)
         await self.runner.setup()
-        site = web.TCPSite(self.runner, "127.0.0.1", 0)
+        site = web.TCPSite(self.runner, "127.0.0.1", port, ssl_context=context)
         await site.start()
         self.port = self.runner.addresses[0][1]
         return self
@@ -141,6 +199,7 @@ class FakeHerald:
         return [body for m, p, body in self.calls if m == method and p == path]
 
     async def handle(self, req):
+        self.request_count += 1
         path = req.match_info["tail"]
         method = req.method
 
@@ -235,12 +294,21 @@ class FakeHerald:
         if path == "info" and method == "GET":
             return ok(
                 app="herald",
-                api=1,
-                version="0.2.0",
+                api=1 if self.plain else 2,
+                version="0.2.0" if self.plain else "0.3.0",
                 id=self.identity,
                 name=self.name,
                 model="Fixture",
                 pairing=True,
+                **(
+                    {}
+                    if self.plain
+                    else {
+                        "tls": True,
+                        "cert_sha256": self.cert_sha256,
+                        "pin_sha256": self.pin_sha256,
+                    }
+                ),
             )
         if path == "pair/start" and method == "POST":
             self.pairing = True
@@ -256,9 +324,9 @@ class FakeHerald:
         if method == "GET" and path == "status":
             return ok(
                 id=self.identity,
-                api=1,
+                api=1 if self.plain else 2,
                 name=self.name,
-                version="0.2.0",
+                version="0.2.0" if self.plain else "0.3.0",
                 stream=self.stream,
                 event_seq=len(self.events),
                 quiet_seconds=4,
@@ -582,7 +650,7 @@ def run(exercise, *, cast=False):
                     await exercise(hass, *boxes, root)
         finally:
             for box in boxes:
-                await box.runner.cleanup()
+                await box.close()
 
     from unittest.mock import patch
 

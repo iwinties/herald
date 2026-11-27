@@ -20,6 +20,7 @@
       },
       "code": {
         "title": "Enter the code shown on the TV",
+        "description": "Fingerprint {fingerprint}. Compare it with the TV before entering the code.",
         "data": {
           "code": "Pairing code"
         }
@@ -36,6 +37,7 @@
     "abort": {
       "wrong_device": "This is not the paired box",
       "already_configured": "Already configured",
+      "unsupported_box": "This box needs Herald API 2 and a valid certificate fingerprint.",
       "invalid_discovery": "Invalid discovery",
       "reauth_successful": "Pairing renewed"
     }

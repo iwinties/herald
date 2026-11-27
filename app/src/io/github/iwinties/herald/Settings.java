@@ -3,9 +3,11 @@ package io.github.iwinties.herald;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.function.Consumer;
 
@@ -37,7 +39,9 @@ final class Settings {
                 "mqtt", Json.fields("enabled", false, "host", "", "port", 1883, "tls", false, "username", "",
                         "password", "", "base_topic", "herald", "discovery", true, "discovery_prefix", "homeassistant", "commands", true),
                 "compat", Json.fields("tvoverlay", Json.fields("enabled", false, "port", 5001,
-                        "allowed", Collections.emptyList(), "category", "general")));
+                        "allowed", Collections.emptyList(), "category", "general")),
+                "ntfy", Json.fields("enabled", false, "server", "https://ntfy.sh", "token", "", "token_server", "",
+                        "catch_up", 120, "topics", Collections.emptyList()));
         Map<String, Object> doc = stored == null ? Collections.emptyMap() : Json.parse(stored);
         Object schema = doc.get("schema");
         discardedStored = stored != null && !(schema instanceof Number && ((Number) schema).doubleValue() == 2);
@@ -76,6 +80,13 @@ final class Settings {
     boolean discardedStored() { return discardedStored; }
 
     synchronized Map<String, Object> mqttPrivate() { return new LinkedHashMap<>(object(groups.get("mqtt"), "mqtt")); }
+
+    synchronized Map<String,Object> ntfyPrivate() { return new LinkedHashMap<>(object(groups.get("ntfy"), "ntfy")); }
+
+    @SuppressWarnings("unchecked")
+    static List<Map<String,Object>> topics(Map<String,Object> group) {
+        return (List<Map<String,Object>>)group.get("topics");
+    }
 
     synchronized int revision() { return revision; }
     synchronized int port() { return (int) object(groups.get("device"), "device").get("port"); }
@@ -154,6 +165,17 @@ final class Settings {
             display.put("chip_look", "glass");
             next.put("display", Collections.unmodifiableMap(display));
         }
+        Map<String,Object> ntfy = ntfyPrivate();
+        List<Map<String,Object>> topics = new ArrayList<>();
+        for (Map<String,Object> row : topics(ntfy)) {
+            if (key.equals(row.get("look"))) {
+                row = new LinkedHashMap<>(row);
+                row.put("look", null);
+            }
+            topics.add(Collections.unmodifiableMap(row));
+        }
+        ntfy.put("topics", Collections.unmodifiableList(topics));
+        next.put("ntfy", Collections.unmodifiableMap(ntfy));
         commit(next, entries, remaining);
     }
 
@@ -188,6 +210,10 @@ final class Settings {
         Map<String, Object> mqtt = new LinkedHashMap<>(object(result.get("mqtt"), "mqtt"));
         mqtt.put("password_set", !"".equals(mqtt.remove("password")));
         result.put("mqtt", mqtt);
+        Map<String,Object> ntfy = ntfyPrivate();
+        ntfy.put("token_set", !"".equals(ntfy.remove("token")));
+        ntfy.remove("token_server");
+        result.put("ntfy", ntfy);
         return result;
     }
 
@@ -203,7 +229,7 @@ final class Settings {
         for (String key : groups.keySet()) {
             Map<String, Object> current = object(groups.get(key), key);
             Map<String, Object> edit = object(patch.getOrDefault(key, Collections.emptyMap()), key);
-            next.put(key, mergeGroup(key, current, edit, next, patch));
+            next.put(key, mergeGroup(key, current, edit, next, patch, restoring));
         }
         Map<String, Category> entries = categories;
         if (patch.containsKey("categories")) entries = replaceCategories(patch.get("categories"));
@@ -211,6 +237,13 @@ final class Settings {
         for (Category category : entries.values()) {
             if (Look.builtin(category.look) == null && !looks.containsKey(category.look)) throw new Invalid("categories." + index + ".look");
             index++;
+        }
+        int topicIndex = 0;
+        for (Map<String,Object> topic : topics(object(next.get("ntfy"), "ntfy"))) {
+            String look = (String)topic.get("look");
+            if (look != null && Look.builtin(look) == null && !looks.containsKey(look))
+                throw new Invalid("ntfy.topics." + topicIndex + ".look");
+            topicIndex++;
         }
         String chipLook = (String) object(next.get("display"), "display").get("chip_look");
         if (Look.builtin(chipLook) == null && !looks.containsKey(chipLook)) throw new Invalid("display.chip_look");
@@ -225,15 +258,26 @@ final class Settings {
     }
 
     private Map<String, Object> mergeGroup(String path, Map<String, Object> current, Map<String, Object> patch,
-            Map<String, Object> candidate, Map<String, Object> rootPatch) {
+            Map<String, Object> candidate, Map<String, Object> rootPatch, boolean restoring) {
         Map<String, Object> next = new LinkedHashMap<>();
         for (String key : current.keySet()) {
             String field = path + "." + key;
             Object old = current.get(key);
             Object v = patch.getOrDefault(key, old);
-            if (old instanceof Map) {
+            if (field.equals("ntfy.token")) {
+                boolean moved = !next.get("server").equals(current.get("server"));
+                if (v == null) v = "";
+                else if (!(v instanceof String)) throw new Invalid(field);
+                else if (!patch.containsKey(key) || "".equals(v)) v = moved ? "" : old;
+                else if (((String)v).length() > 256 || ((String)v).codePoints().anyMatch(c ->
+                        Character.isWhitespace(c) || Character.isSpaceChar(c) || c == 0x85)) throw new Invalid(field);
+                if (restoring && !next.get("server").equals(patch.get("token_server"))) v = "";
+            } else if (field.equals("ntfy.token_server")) {
+                if (!restoring && patch.containsKey(key)) throw new Invalid(field);
+                v = "".equals(next.get("token")) ? "" : next.get("server");
+            } else if (old instanceof Map) {
                 Map<String, Object> nested = object(patch.getOrDefault(key, Collections.emptyMap()), field);
-                v = mergeGroup(field, object(old, field), nested, candidate, rootPatch);
+                v = mergeGroup(field, object(old, field), nested, candidate, rootPatch, restoring);
             } else {
                 if (old instanceof String && !(v instanceof String) || old instanceof Boolean && !(v instanceof Boolean)) {
                     throw new Invalid(field);
@@ -252,6 +296,9 @@ final class Settings {
                     case "display.sticky_cap": v = integer(v, field, 60, 86400); break;
                     case "audio.volume_tv": case "audio.volume_speaker": v = integer(v, field, 0, 100); break;
                     case "audio.speaker_at_night": v = choice(v, field, "urgent always never"); break;
+                    case "ntfy.server": v = Ntfy.canonical((String)v); break;
+                    case "ntfy.catch_up": v = integer(v, field, 0, 600); break;
+                    case "ntfy.topics": v = validateTopics(v, rootPatch); break;
                     case "mqtt.port": v = integer(v, field, 1, 65535); break;
                     case "mqtt.password": if ("".equals(v)) v = old; break;
                     case "mqtt.base_topic":
@@ -274,9 +321,38 @@ final class Settings {
             next.put(key, v);
         }
         Map<String, Object> writable = new LinkedHashMap<>(patch);
+        if (path.equals("ntfy")) writable.remove("token_set");
         if (path.equals("mqtt")) writable.remove("password_set");
         rejectUnknown(writable, current, path);
         return Collections.unmodifiableMap(next);
+    }
+
+    private List<Map<String,Object>> validateTopics(Object value, Map<String,Object> rootPatch) {
+        if (!(value instanceof List) || ((List<?>)value).size() > 4) throw new Invalid("ntfy.topics");
+        List<Map<String,Object>> result = new ArrayList<>();
+        Set<String> names = new HashSet<>();
+        for (Object item : (List<?>)value) {
+            String path = "ntfy.topics." + result.size();
+            Map<String,Object> input = object(item, path);
+            Map<String,Object> row = Json.fields("topic", "", "label", "", "category", "general", "look", null, "speak", false);
+            rejectUnknown(input, row, path);
+            row.putAll(input);
+            Object name = row.get("topic"), label = row.get("label"), look = row.get("look");
+            if (!(name instanceof String) || !((String)name).matches("[A-Za-z0-9_-]{1,64}") || !names.add((String)name))
+                throw new Invalid(path + ".topic");
+            if (!(label instanceof String) || ((String)label).length() > 40) throw new Invalid(path + ".label");
+            if (!(row.get("speak") instanceof Boolean)) throw new Invalid(path + ".speak");
+            if (look != null) id(look, path + ".look");
+            String category = id(row.get("category"), path + ".category");
+            if (!willExist(category, rootPatch)) {
+                boolean retained = topics(ntfyPrivate()).stream().anyMatch(previous ->
+                        name.equals(previous.get("topic")) && category.equals(previous.get("category")));
+                if (!retained || !categories.containsKey(category)) throw new Invalid(path + ".category");
+                row.put("category", "general");
+            }
+            result.add(Collections.unmodifiableMap(row));
+        }
+        return Collections.unmodifiableList(result);
     }
 
     private static List<String> allowed(Object value, String field, boolean enabled) {

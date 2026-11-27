@@ -6,7 +6,7 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers import selector
 
-from .client import ApiError, HeraldClient
+from .client import ApiError, HeraldClient, valid_pin
 from .const import DOMAIN, PORT, SPEAKERS
 
 
@@ -22,7 +22,7 @@ def form_error(exc):
 
 
 class HeraldFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    VERSION = 1
+    VERSION = 2
 
     @staticmethod
     @callback
@@ -56,7 +56,11 @@ class HeraldFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_zeroconf(self, discovery_info):
         self.address = {"host": discovery_info.host, "port": discovery_info.port}
         identity = discovery_info.properties.get("id")
-        if not identity or identity == SPEAKERS:
+        if (
+            not identity
+            or identity == SPEAKERS
+            or discovery_info.properties.get("api") != "2"
+        ):
             return self.async_abort(reason="invalid_discovery")
         await self.async_set_unique_id(identity)
         if entry := self.hass.config_entries.async_entry_for_domain_unique_id(
@@ -102,13 +106,16 @@ class HeraldFlow(config_entries.ConfigFlow, domain=DOMAIN):
         identity = info.get("id")
         if (
             info.get("app") != DOMAIN
-            or info.get("api") != 1
             or not identity
             or identity == SPEAKERS
             or self.unique_id
             and self.unique_id != identity
         ):
             return self.async_abort(reason="wrong_device")
+        self.pin = info.get("cert_sha256")
+        if info.get("api") != 2 or not valid_pin(self.pin):
+            return self.async_abort(reason="unsupported_box")
+        self.client = HeraldClient(self.hass, **self.address, pin=self.pin)
         await self.async_set_unique_id(identity)
         if self.source != config_entries.SOURCE_REAUTH:
             self._abort_if_unique_id_configured()
@@ -129,6 +136,7 @@ class HeraldFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     **self.address,
                     "device_id": self.unique_id,
                     "token": reply["token"],
+                    "cert_sha256": self.pin,
                 }
                 if self.source == config_entries.SOURCE_REAUTH:
                     return self.async_update_reload_and_abort(
@@ -139,6 +147,11 @@ class HeraldFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors["base"] = form_error(exc)
         return self.async_show_form(
             step_id="code",
+            description_placeholders={
+                "fingerprint": " ".join(
+                    self.pin[i : i + 4].upper() for i in range(0, 16, 4)
+                )
+            },
             data_schema=vol.Schema(
                 {vol.Required("code"): selector.TextSelector({"type": "password"})}
             ),

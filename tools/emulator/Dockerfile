@@ -1,4 +1,4 @@
-FROM herald-build:36-m3-1.11.1
+FROM herald-build:36-m3-1.11.1-bt1.18.3
 
 # Google's emulator-container template includes the ncurses 5 compatibility ABI.
 # Ubuntu 26.04 no longer ships it. Use the signed Jammy archive at fallback

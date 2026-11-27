@@ -9,6 +9,7 @@ version=$(sed -n 's/.*android:versionName="\([^"]*\)".*/\1/p' app/AndroidManifes
 case "$version" in ''|*[!0-9A-Za-z.-]*) die "invalid versionName" ;; esac
 tag=v$version
 apk=herald-$version.apk
+aab=herald-$version.aab
 manifest=out/herald-$version.release.json
 mkdir -p out
 exec 9>out/.release.lock
@@ -20,33 +21,35 @@ trap 'exit 1' HUP INT TERM
 # apksigner reads only the signed APK, including when checking a downloaded release.
 certificate() {
     ${DOCKER:-sudo docker} run --rm --network none -v "$PWD/$1:/candidate.apk:ro" \
-        herald-build:36-m3-1.11.1 apksigner verify --print-certs /candidate.apk > "$stage/certificate"
+        herald-build:36-m3-1.11.1-bt1.18.3 apksigner verify --print-certs /candidate.apk > "$stage/certificate"
     sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "$stage/certificate"
 }
 digest() { sha256sum "$1" > "$stage/digest" && cut -d ' ' -f 1 "$stage/digest"; }
 
 if [ "$1" = build ]; then
     [ -z "$(git status --porcelain)" ] || die "build requires a clean commit"
-    for file in "out/$apk" "out/$apk.sha256" "$manifest"; do
+    for file in "out/$aab" "out/$apk" "out/$apk.sha256" "$manifest"; do
         [ ! -e "$file" ] || die "candidate already exists: $file"
     done
     commit=$(git rev-parse HEAD)
     tools/build.sh
+    cp out/herald.aab "$stage/$aab"
+    aab_hash=$(digest "$stage/$aab")
     cp out/herald.apk "$stage/$apk"
     hash=$(digest "$stage/$apk")
     cert=$(certificate "$stage/$apk")
-    python3 - "$commit" "$version" "$hash" "$cert" > "$stage/release.json" <<'PY'
+    python3 - "$commit" "$version" "$hash" "$aab_hash" "$cert" > "$stage/release.json" <<'PY'
 import json
 import re
 import sys
 
-commit, version, apk_hash, cert_hash = sys.argv[1:]
-if not all(re.fullmatch("[0-9a-f]{64}", value) for value in (apk_hash, cert_hash)):
-    sys.exit("missing APK or certificate digest")
-print(json.dumps(dict(commit=commit, version=version, apk_sha256=apk_hash, cert_sha256=cert_hash)))
+commit, version, apk_hash, aab_hash, cert_hash = sys.argv[1:]
+if not all(re.fullmatch("[0-9a-f]{64}", value) for value in (apk_hash, aab_hash, cert_hash)):
+    sys.exit("missing APK, AAB or certificate digest")
+print(json.dumps(dict(commit=commit, version=version, apk_sha256=apk_hash, aab_sha256=aab_hash, cert_sha256=cert_hash)))
 PY
     printf '%s  %s\n' "$hash" "$apk" > "$stage/$apk.sha256"
-    mv "$stage/$apk" "$stage/$apk.sha256" out/
+    mv "$stage/$aab" "$stage/$apk" "$stage/$apk.sha256" out/
     mv "$stage/release.json" "$manifest"
     exit 0
 fi

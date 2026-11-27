@@ -10,6 +10,16 @@ import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
+import java.net.InetAddress;
+import java.net.ServerSocket;
+import java.net.Socket;
+import java.security.KeyStore;
+import java.security.cert.Certificate;
+import java.util.concurrent.atomic.AtomicInteger;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLServerSocket;
+import javax.net.ssl.SSLSocket;
+import javax.net.ssl.TrustManagerFactory;
 import java.security.SecureRandom;
 import java.security.MessageDigest;
 import java.util.concurrent.CountDownLatch;
@@ -35,7 +45,43 @@ public final class PureTest {
         try { runTests(); } finally { deleteTree(testRoot); }
     }
 
+    private static void setupTests() {
+        for (int mask = 0; mask < 8; mask++) {
+            boolean id = (mask & 1) != 0, auth = (mask & 2) != 0, settings = (mask & 4) != 0;
+            eq(mask != 0, Setup.resolveReceiving(null, id, auth, settings), "legacy install");
+            for (boolean stored : new boolean[]{false, true})
+                eq(stored, Setup.resolveReceiving(stored, id, auth, settings), "explicit choice");
+        }
+        pass("setup: an absent receiving flag is true when device_id, auth or settings exist (each alone) and false on a fresh install");
+        eq(Setup.Target.PACKAGE_OVERLAY, Setup.overlayTarget(true, true, true), "package URI");
+        eq(Setup.Target.OVERLAY, Setup.overlayTarget(false, true, true), "plain settings");
+        eq(Setup.Target.APP_DETAILS, Setup.overlayTarget(false, false, true), "app details");
+        eq(Setup.Target.ADB, Setup.overlayTarget(false, false, false), "no settings activity");
+        pass("setup: overlay row falls back from the package URI to the plain action, to app details, to the ADB text");
+        eq(Setup.Target.BATTERY, Setup.batteryTarget(true), "battery settings");
+        eq(Setup.Target.ADB, Setup.batteryTarget(false), "battery fallback");
+        pass("setup: battery row falls back to the ADB text when the settings screen does not resolve");
+        eq("Needs row 1", Setup.testCardStatus(false), "missing overlay");
+        eq("Ready", Setup.testCardStatus(true), "overlay granted");
+        pass("setup: test card row needs the overlay permission");
+        for (String section : SettingsModel.SECTIONS) {
+            eq(section.equals("Setup") || section.equals("About"), Setup.available(section, false), section);
+            check(Setup.available(section, true), section);
+        }
+        pass("setup: with receiving off only Setup and About are available");
+        check(Setup.PRIVACY.contains("https://github.com/iwinties/herald/blob/main/docs/PRIVACY.md"), "policy");
+        check(Setup.PRIVACY.contains("https://github.com/iwinties/herald/issues"), "contact");
+        pass("setup: the privacy text names the public policy URL and the contact");
+        for (boolean before : new boolean[]{false, true}) {
+            eq(before, Setup.afterStart(before, true), "refused");
+            check(Setup.afterStart(before, false), "accepted");
+        }
+        pass("setup: a refused start keeps the saved choice from before the request (Off stays Off, On stays On)");
+    }
+
     static void runTests() throws Exception {
+        tlsTests();
+        setupTests();
         httpNoBody();
         pass("http reads a request with no body");
         httpBodyInPieces();
@@ -259,6 +305,7 @@ public final class PureTest {
         soundPlayers();
         pass("sound tracks audible players as a set and starts the grace period when the last one stops, in either order");
         mqttTests();
+        ntfyTests();
         compatTests();
         int frames = chime.length;
         eq(1270L, AudioTiming.remainingMs(5000, frames, 22050, 200, 5000), "whole chime and pause");
@@ -362,13 +409,13 @@ public final class PureTest {
         pairingLayout(1280, 720, new int[]{423,234,435,253}, 374, 32, 43,
                 new int[]{526,564,602,648,686,724});
         pass("pairing window: six digits in two groups, an m:ss countdown and the pixel layout at 1920x1080 and 1280x720");
-        eq(Arrays.asList("Looks", "Categories", "Display", "Sound & voice", "Pairing & clients",
-                "MQTT", "Compatibility", "Status", "About"), SettingsModel.SECTIONS, "sections");
+        eq(Arrays.asList("Setup", "Looks", "Categories", "Display", "Sound & voice", "Pairing & clients",
+                "MQTT", "ntfy", "Compatibility", "Status", "About"), SettingsModel.SECTIONS, "sections");
         eq(Arrays.asList("Version  0.2", "Address  host:7979", "Address  [::1]:7979",
-                "Paired clients  2 · One, Two", "Last card  —", "Last audio  played chime",
-                "Sound playing  false", "Screen on  true", "MQTT  off", "Compatibility  listening",
-                "Overlay permission  true", "Battery exemption  —"),
-                SettingsModel.statusRows(Json.fields("version", "0.2", "last_audio", "played chime",
+                "API  TLS unavailable", "Paired clients  2 · One, Two", "Last card  —", "Last audio  played chime",
+                "Sound playing  false", "Screen on  true", "MQTT  off", "ntfy  —", "Compatibility  listening",
+                "Overlay permission  true", "Battery exemption  —", "Receiving  On"),
+                SettingsModel.statusRows(Json.fields("version", "0.2", "api_status", "TLS unavailable", "last_audio", "played chime",
                         "sound_playing", false, "screen_on", true, "mqtt", "off", "compat", "listening",
                         "overlay_allowed", true), Arrays.asList("One", "Two"), Arrays.asList("host:7979", "[::1]:7979")), "status");
         pass("settings app: the sections and the Status rows, with — for unknown values");
@@ -1207,6 +1254,210 @@ public final class PureTest {
         MqttTopics.run(cmd, text.getBytes(StandardCharsets.UTF_8), f, f.settings, f.cards, f.chips, f.requestIds);
     }
 
+    private static void ntfyTests() throws Exception {
+        Fake f = new Fake();
+        String auth = f.issue("ntfy settings fixture");
+        Settings s = f.settings;
+        Map<String,Object> defaults = Json.fields("enabled", false, "server", "https://ntfy.sh",
+                "catch_up", 120, "topics", List.of(), "token_set", false);
+        eq(defaults, s.document().get("ntfy"), "ntfy defaults");
+        Map<String,Object> a = Json.fields("topic", "a"), b = Json.fields("topic", "b"),
+                c = Json.fields("topic", "c"), d = Json.fields("topic", "d");
+        s.put(at("ntfy.topics", List.of(a, b, c, d)));
+        badSettings(f, auth, at("ntfy.topics", List.of(a, b, c, d, a)), "ntfy.topics");
+        badSettings(f, auth, at("ntfy.topics", List.of(a, a)), "ntfy.topics.1.topic");
+        for (int n : new int[]{-1, 601}) badSettings(f, auth, at("ntfy.catch_up", n), "ntfy.catch_up");
+        for (int n : new int[]{0, 600}) s.put(at("ntfy.catch_up", n));
+        for (String name : List.of("", "a/b", "a".repeat(65)))
+            badSettings(f, auth, at("ntfy.topics", List.of(Json.fields("topic", name))), "ntfy.topics.0.topic");
+        badSettings(f, auth, at("ntfy.topics", List.of(Json.fields("topic", "a", "label", "😀".repeat(21)))), "ntfy.topics.0.label");
+        Map<String,Object> custom = Json.fields("id", "local", "name", "Local", "style", Json.fields());
+        a.put("look", "local");
+        badSettings(f, auth, at("ntfy.topics", List.of(a)), "ntfy.topics.0.look");
+        b.put("look", "local");
+        c.put("look", "glass");
+        s.put(Json.fields("looks", List.of(custom), "ntfy", Json.fields("topics", List.of(a,b,c))));
+        int revision = s.revision();
+        badSettings(f, auth, Json.fields("looks", List.of()), "ntfy.topics.0.look");
+        eq(revision, s.revision(), "atomic rejection");
+        eq("local", Settings.topics(s.ntfyPrivate()).get(0).get("look"), "retained reference");
+        ok(f.request("DELETE", "/v1/looks/local", bearer(auth), ""));
+        eq(revision + 1, s.revision(), "single delete revision");
+        for (int i = 0; i < 3; i++) eq(i == 2 ? "glass" : null, Settings.topics(s.ntfyPrivate()).get(i).get("look"), "delete references");
+        pass("ntfy: settings defaults, four-topic limit, unique names, catch_up bounds and topic look references (a missing look is rejected, deleting a look clears it to null)");
+
+        String secret = java.util.UUID.randomUUID().toString();
+        s.put(at("ntfy.token", secret));
+        Map<String,Object> pub = Settings.object(ok(f.request("GET", "/v1/settings", bearer(auth), "")).get("ntfy"), "ntfy");
+        check(Boolean.TRUE.equals(pub.get("token_set")) && !pub.containsKey("token") && !pub.containsKey("token_server")
+                && !Json.stringify(pub).contains(secret), "private fields hidden");
+        s.put(at("ntfy", Json.fields("token", "", "token_set", false)));
+        f.restart();
+        s = f.settings;
+        check(secret.equals(s.ntfyPrivate().get("token")), "private value restored");
+        s.put(at("ntfy.token", null));
+        check("".equals(s.ntfyPrivate().get("token")), "clear");
+        for (Object invalid : List.of(2, "two words", "a".repeat(257)))
+            badSettings(f, auth, at("ntfy.token", invalid), "ntfy.token");
+        pass("ntfy: the token is write-only: token_set on GET, empty keeps, null clears, and the private value survives a reload");
+
+        String server = "https://notify.example";
+        s.put(at("ntfy", Json.fields("server", server, "token", secret)));
+        s.put(at("ntfy.server", "HTTPS://NOTIFY.EXAMPLE"));
+        check(secret.equals(s.ntfyPrivate().get("token")), "canonical address keeps credential");
+        s.put(at("ntfy", Json.fields("server", "https://other.example", "token", "")));
+        check("".equals(s.ntfyPrivate().get("token")) && "".equals(s.ntfyPrivate().get("token_server")), "changed server clears both");
+        s.put(at("ntfy", Json.fields("server", server, "token", secret)));
+        check(secret.equals(s.ntfyPrivate().get("token")) && server.equals(s.ntfyPrivate().get("token_server")), "new binding");
+        s.put(at("ntfy.server", "https://other.example"));
+        f.restart();
+        check("".equals(f.settings.ntfyPrivate().get("token")), "no credential follows a restore");
+        pass("ntfy: changing the server clears the token unless a new token comes with it");
+
+        Map<String,Object> old = Json.parse(f.settingsJson);
+        old.remove("ntfy");
+        Settings legacy = new Settings("TV", Json.stringify(old), json -> { throw new AssertionError("unexpected save"); }, f.events);
+        eq(defaults, legacy.document().get("ntfy"), "schema 2 without group");
+        pass("ntfy: a stored 0.2 settings document without ntfy loads with defaults");
+
+        for (String good : List.of(server, "https://[::1]:8443/path", "http://10.0.0.1", "http://172.16.0.0",
+                "http://172.31.255.255", "http://192.168.1.2:8080/base", "http://[fc00::1]", "http://[fdff::1]/base"))
+            check(Ntfy.serverAllowed(good), "valid server");
+        for (String bad : List.of("http://notify.example", "http://127.0.0.1", "http://172.32.0.0", "http://[fe80::1]",
+                "http://010.1.1.1", "https://u@example.org", server + "/p/", server + "?", server + "#", "ftp://example.org", "//example.org"))
+            check(!Ntfy.serverAllowed(bad), "rejected server");
+        eq("https://notify.example/Prefix", Ntfy.canonical("HTTPS://Notify.Example/Prefix"), "canonical");
+        pass("ntfy: server rule accepts https hosts and private http IP literals and refuses the rest");
+
+        Map<String,Object> topic = Json.fields("topic", "events", "label", "Updates", "category", "general", "speak", false, "look", null);
+        Map<String,Object> event = Json.fields("topic", "events", "event", "message", "id", "ev01", "time", 1000,
+                "title", "A title", "message", "**plain text**");
+        Settings mapping = legacy;
+        java.util.function.Supplier<Map<String,Object>> card = () -> Ntfy.card(server, topic, event, 120, 1000, List.of(), mapping);
+        for (int n = 0; n <= 5; n++) {
+            if (n > 0) event.put("priority", n);
+            eq(List.of("normal", "low", "low", "normal", "high", "high").get(n), card.get().get("priority"), "priority");
+            eq(n == 5 ? "reminder" : "general", card.get().get("category"), "category");
+        }
+        topic.put("category", "alarm");
+        eq("alarm", card.get().get("category"), "explicit category");
+        eq(30, new CardSpec(card.get(), mapping).style.fields.get("duration"), "sticky duration capped");
+        topic.put("category", "general");
+        pass("ntfy: priority maps 1-2 low, 3 normal, 4 high, 5 high reminder");
+
+        event.put("tags", List.of("unknown", "warning", "bell"));
+        eq("emoji:⚠️", new CardSpec(card.get(), mapping).style.fields.get("icon"), "first recognized");
+        event.put("tags", List.of("other"));
+        eq("none", new CardSpec(card.get(), mapping).style.fields.get("icon"), "unknown icon");
+        pass("ntfy: the first recognized tag sets an emoji: icon that CardSpec accepts, an unknown tag gives none");
+
+        eq("A title", card.get().get("title"), "publisher title");
+        eq("**plain text**", card.get().get("message"), "literal message");
+        event.remove("title");
+        eq("Updates", card.get().get("title"), "label fallback");
+        topic.put("label", "");
+        eq("Notification", card.get().get("title"), "default title");
+        pass("ntfy: title falls back to the topic label, then Notification");
+
+        event.put("expires", 999);
+        eq(null, card.get(), "expired");
+        event.remove("expires");
+        eq(null, Ntfy.card(server, topic, event, 120, 1000, List.of("ev01"), mapping), "seen");
+        pass("ntfy: expired and repeated messages are skipped");
+
+        event.put("time", 1);
+        check(Ntfy.card(server, topic, event, 0, 1000, List.of(), mapping) != null, "live has no age test");
+        eq("", Ntfy.since(0, "ev01", 1, 1000), "live query omitted");
+        pass("ntfy: catch_up 0 subscribes live without an age check");
+
+        eq(null, card.get(), "too old");
+        event.put("time", 880);
+        check(card.get() != null, "inclusive window");
+        pass("ntfy: with catch_up set, messages older than catch_up are skipped");
+
+        eq(false, card.get().get("announce"), "silent by default");
+        topic.put("speak", true);
+        eq(Json.fields("timing", "now", "urgent", false, "chime", false), card.get().get("announce"), "opted in");
+        event.put("priority", 4);
+        eq(false, card.get().get("announce"), "lower priority silent");
+        pass("ntfy: priority 5 speaks only when the topic opts in");
+
+        eq("nt_ac5ae1acd97a02b183c3d181e3cbe276", card.get().get("id"), "hash tuple");
+        pass("ntfy: card ids are nt_ plus 32 hex of the server, topic and id");
+
+        eq("ev01", Ntfy.since(120, "ev01", 881, 1000), "recent cursor");
+        eq("120s", Ntfy.since(120, "ev01", 880, 1000), "old cursor");
+        eq("120s", Ntfy.since(120, "", 999, 1000), "no cursor");
+        pass("ntfy: since uses the stored id inside catch_up and seconds outside it");
+
+        String key = Ntfy.stateKey(server, "events");
+        check(key.matches("[0-9a-f]{64}") && !key.equals(Ntfy.stateKey(server, "other"))
+                && !key.equals(Ntfy.stateKey("https://other.example", "events")), "separate state");
+        eq(key, Ntfy.stateKey("HTTPS://NOTIFY.EXAMPLE", "events"), "canonical state");
+        pass("ntfy: state keys differ per server and topic");
+
+        Ntfy.Cursor cursor = new Ntfy.Cursor("{}");
+        for (int i = 0; i <= 256; i++) {
+            event.put("id", "id" + i);
+            cursor = new Ntfy.Cursor(cursor.advance("events", event));
+        }
+        eq(256, cursor.recent.size(), "persistent bounded history");
+        check(!cursor.recent.contains("id0") && cursor.recent.contains("id1"), "oldest evicted");
+        for (String type : List.of("open", "keepalive", "message")) {
+            event.put("event", type);
+            event.put("id", "ignored");
+            eq(null, cursor.advance(type.equals("message") ? "another" : "events", event), "ignored event");
+            eq("id256", cursor.id, "unchanged cursor");
+        }
+        for (Object bad : List.of("id/1", "", 5)) {
+            event.put("id", bad);
+            check(!Ntfy.handles("events", event), "invalid id");
+        }
+        event.put("id", "valid");
+        event.put("time", 12.5);
+        check(!Ntfy.handles("events", event), "fractional time");
+        pass("ntfy: open and keepalive lines and other topics leave the cursor alone");
+
+        for (int i = 0; i < 6; i++) {
+            long base = List.of(5,10,20,40,60,60).get(i) * 1000L;
+            eq(base, Ntfy.backoff(i, 0, 0), "retry base");
+            eq(base * 12 / 10, Ntfy.backoff(i, 0, 1), "jitter bound");
+        }
+        for (int code : new int[]{401,403}) {
+            eq(-1L, Ntfy.backoff(0, code, 0), "stop retrying");
+            eq("unauthorized", Ntfy.httpState(code), "auth status");
+        }
+        eq(60000L, Ntfy.backoff(0, 429, 1), "rate limit");
+        pass("ntfy: backoff runs 5 10 20 40 60 s with jitter and stops on 401 or 403");
+
+        for (int code : new int[]{300,301,302,307,308,399}) {
+            eq("error", Ntfy.httpState(code), "redirect state");
+            eq(5000L, Ntfy.backoff(0, code, 0), "redirect retry");
+        }
+        pass("ntfy: a 3xx reply is an error with backoff");
+
+        InputStream lines = new ByteArrayInputStream(bytes("a".repeat(16384) + "\n" + "b".repeat(16385) + "\nok\n"));
+        eq(16384, Ntfy.readLine(lines).length(), "limit");
+        eq("", Ntfy.readLine(lines), "over limit");
+        eq("ok", Ntfy.readLine(lines), "next line");
+        eq(null, Ntfy.readLine(lines), "EOF");
+        eq("off", Ntfy.worst(List.of()), "no topics");
+        eq("connecting", Ntfy.worst(List.of("connected", "connecting")), "waiting");
+        eq("error", Ntfy.worst(List.of("error", "connecting")), "error dominates");
+        eq("unauthorized", Ntfy.worst(List.of("connected", "unauthorized", "error")), "auth dominates");
+        pass("ntfy: lines over 16384 bytes are dropped and status reports the worst topic state");
+
+        String privateName = "topic-" + java.util.UUID.randomUUID(), privateBody = "body-" + java.util.UUID.randomUUID();
+        String detail = secret + "/" + privateName + "/" + privateBody;
+        String logged = Ntfy.logLine(3, "error", 403, new IOException(detail));
+        eq("ntfy 3 error http 403 IOException", logged, "fixed fields");
+        for (String privateValue : List.of(secret, privateName, privateBody, detail))
+            check(!logged.contains(privateValue), "private text absent");
+        eq("ntfy 1 error", Ntfy.logLine(1, detail, 0, null), "unknown event hidden");
+        pass("ntfy: log lines carry the topic index and event but never the token, topic name, message text or exception message");
+    }
+
+
     static void mqttTests() {
         Fake f = new Fake();
         MqttTopics topics = new MqttTopics("herald", "device", true, () -> f.now);
@@ -1324,7 +1575,7 @@ public final class PureTest {
         eq(0,g.chips.rows().size(),"chip deleted");
         pass("mqtt notify takes plain text, clear takes id, category or all, and chip delete needs delete true");
 
-        eq(Map.of("id","uuid","api","1","version","1.2.3"),MqttTopics.txt("uuid","1.2.3"),"NSD TXT");
+        eq(Map.of("id","uuid","api","2","version","1.2.3"),MqttTopics.txt("uuid","1.2.3"),"NSD TXT");
         pass("discovery txt holds id, api and version");
     }
 
@@ -1748,7 +1999,100 @@ public final class PureTest {
         check(lastSample < 0.02 * 32767, "last sample " + lastSample);
     }
 
+    static TlsIdentity fixtureIdentity;
+
+    // Serve exactly one connection. Surface exceptions from the server thread to the test.
+    static byte[] exchange(ServerSocket server, Socket client, Fake f, String request) throws Exception {
+        FutureTask<Void> served = new FutureTask<>(() -> {
+            try (Socket socket = server.accept()) {
+                socket.setSoTimeout(3000);
+                if (socket instanceof SSLSocket) {
+                    if (TlsIdentity.handshake((SSLSocket) socket, f.failures))
+                        f.api.handle(socket.getInputStream(), socket.getOutputStream());
+                } else {
+                    Compat compat = new Compat(f.settings, f.cards, f.chips, () -> f.now, f, f.requestIds);
+                    compat.handle(socket.getInetAddress().getHostAddress(), socket.getLocalPort(),
+                            socket.getInputStream(), socket.getOutputStream());
+                }
+            }
+            return null;
+        });
+        new Thread(served, "fixture-listener").start();
+        try (Socket c = client) {
+            c.setSoTimeout(5000);
+            c.getOutputStream().write(bytes(request + "\r\n\r\n"));
+            return c.getInputStream().readAllBytes();
+        } finally {
+            served.get(5, TimeUnit.SECONDS);
+        }
+    }
+
+    static Map<String,Object> tlsGet(SSLContext client, ServerSocket server, Fake f, String request) throws Exception {
+        Socket socket = client.getSocketFactory().createSocket(server.getInetAddress(), server.getLocalPort());
+        ByteArrayOutputStream reply = new ByteArrayOutputStream();
+        reply.write(exchange(server, socket, f, request));
+        return ok(parseResponse(reply));
+    }
+
+    static void tlsTests() throws Exception {
+        char[] password = "herald-test".toCharArray();
+        KeyStore store = KeyStore.getInstance("PKCS12");
+        try (InputStream in = Files.newInputStream(new File(System.getProperty("herald.tls.fixture")).toPath())) {
+            store.load(in, password);
+        }
+        fixtureIdentity = new TlsIdentity(store, "test", password);
+        Certificate cert = store.getCertificate("test");
+        KeyStore trust = KeyStore.getInstance("PKCS12");
+        trust.load(null, null);
+        trust.setCertificateEntry("peer", cert);
+        TrustManagerFactory managers = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+        managers.init(trust);
+        SSLContext client = SSLContext.getInstance("TLS");
+        client.init(null, managers.getTrustManagers(), null);
+        InetAddress addr = InetAddress.getByName("127.0.0.1");
+        Fake f = new Fake();
+        try (SSLServerSocket server = (SSLServerSocket) fixtureIdentity.sslContext().getServerSocketFactory()
+                    .createServerSocket(0, 1, addr);
+                ServerSocket compat = new ServerSocket(0, 1, addr)) {
+            TlsIdentity.configure(server);
+            Map<String,Object> info = tlsGet(client, server, f, "GET /v1/info HTTP/1.1");
+            eq(2.0, info.get("api"), "api");
+            eq(true, info.get("tls"), "tls");
+            MessageDigest sha = MessageDigest.getInstance("SHA-256");
+            String hex = String.format("%064x", new java.math.BigInteger(1, sha.digest(cert.getEncoded())));
+            eq(hex, info.get("cert_sha256"), "cert digest");
+            eq(fixtureIdentity.pin(), info.get("pin_sha256"), "info pin");
+            pass("tls: info over TLS reports api 2, tls true, the fixture fingerprint and pin");
+            eq(Base64.getEncoder().encodeToString(sha.digest(cert.getPublicKey().getEncoded())),
+                    info.get("pin_sha256"), "SPKI digest");
+            pass("tls: pin_sha256 is the base64 SHA-256 of the public key");
+
+            byte[] rejected = exchange(server, new Socket(addr, server.getLocalPort()), f, "GET /v1/info HTTP/1.1");
+            check(!new String(rejected, StandardCharsets.ISO_8859_1).contains("HTTP/"), "plaintext rejected");
+            pass("tls: a plain HTTP request on the TLS port gets no HTTP reply");
+            f.settings.put(at("compat.tvoverlay", Json.fields("enabled", true,
+                    "port", compat.getLocalPort(), "allowed", List.of("127.0.0.1"))));
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            out.write(exchange(compat, new Socket(addr, compat.getLocalPort()), f, "POST /set/overlay HTTP/1.1"));
+            eq(true, Json.parse(parseResponse(out).body).get("success"), "plain compat");
+            pass("tls: a plain compat request still works while the native port is TLS");
+            eq("AB12 CD34 EF56 7890", TlsIdentity.grouped("ab12cd34ef567890" + hex.substring(16)), "TV groups");
+            pass("tls: the fingerprint shows as four groups of four upper-case hex digits");
+            Map<String,Object> status = tlsGet(client, server, f, "GET /v1/status HTTP/1.1\r\n"
+                    + bearer(f.issue("TLS fixture")).trim());
+            eq(2.0, status.get("api"), "status api");
+            eq(1.0, status.get("tls_failures"), "closed handshake counted once");
+            pass("tls: a failed handshake closes the socket and counts tls_failures");
+            eq("2", MqttTopics.txt("box", "fixture").get("api"), "TXT version");
+            pass("tls: DNS-SD TXT advertises api 2");
+        }
+    }
+
     static final class Fake implements Backend {
+        final AtomicInteger failures = new AtomicInteger();
+        public String certSha256() { return fixtureIdentity.fingerprint(); }
+        public String pinSha256() { return fixtureIdentity.pin(); }
+        public int tlsFailures() { return failures.get(); }
         boolean enabled = true, screen = true, overlay = true, show = true;
         long now = 1800000000123L;
         String saved, displayed, shownName, paired;
@@ -1965,7 +2309,8 @@ public final class PureTest {
 
     static void apiInfo() throws IOException {
         Fake f = new Fake();
-        eq(Json.fields("ok", true, "app", "herald", "version", "0.1.0", "api", 1.0,
+        eq(Json.fields("ok", true, "app", "herald", "version", "0.1.0", "api", 2.0,
+                "tls", true, "cert_sha256", f.certSha256(), "pin_sha256", f.pinSha256(),
                 "id", "device", "name", "Living Room", "model", "model", "pairing", true),
                 ok(f.request("GET", "/v1/info", "", "")), "public info");
     }
@@ -2248,9 +2593,9 @@ public final class PureTest {
     static void statusFields() throws IOException {
         Fake f = new Fake();
         Map<String, Object> status = ok(f.request("GET", "/v1/status", bearer(f.issue("client")), ""));
-        String keys = "ok version api id name stream screen_on overlay_allowed battery_exempt tts_ready outputs "
+        String keys = "ok version api tls_failures id name stream screen_on overlay_allowed battery_exempt tts_ready outputs "
                 + "audio_busy last_audio temp_files sound_playing quiet_seconds cards_visible cards_queued last_card "
-                + "chips clips images settings_revision mqtt compat event_seq";
+                + "chips clips images settings_revision mqtt ntfy compat event_seq";
         eq(java.util.Set.of(keys.split(" ")), status.keySet(), "all documented keys");
         eq(1.0, status.get("event_seq"), "current cursor");
         eq(f.events.stream, status.get("stream"), "same stream as events");

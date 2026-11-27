@@ -18,7 +18,12 @@ class AddressRepair(RepairsFlow):
                 return self.async_abort(reason="unknown_entry")
             address = {k: self.address_data[k] for k in ("host", "port")}
             try:
-                info = await HeraldClient(self.hass, **address).request("GET", "info")
+                pin = entry.data.get("cert_sha256")
+                if pin is None:
+                    raise ApiError()
+                info = await HeraldClient(self.hass, **address, pin=pin).request(
+                    "GET", "info"
+                )
                 if info.get("id") == entry.unique_id and info.get("app") == "herald":
                     self.hass.config_entries.async_update_entry(
                         entry, data={**entry.data, **address}

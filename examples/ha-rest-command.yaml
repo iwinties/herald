@@ -1,9 +1,13 @@
+# Home Assistant rest_command cannot pin Herald's self-signed certificate. With
+# verify_ssl: false a different device on the network could receive the token.
+# The recommended Herald integration (HACS) pins the box certificate at pairing.
 # Merge under rest_command in configuration.yaml. Set herald_token privately in
 # secrets.yaml to the COMPLETE Authorization header value (Bearer, space, token).
 # Replace 192.0.2.10 with your box address.
 rest_command:
   show_card:
-    url: "http://192.0.2.10:7979/v1/cards"
+    verify_ssl: false
+    url: "https://192.0.2.10:7979/v1/cards"
     method: POST
     headers:
       Authorization: !secret herald_token
@@ -11,13 +15,15 @@ rest_command:
     payload: "{{ {'id': id, 'message': message} | to_json }}"
 
   clear_card:
-    url: "http://192.0.2.10:7979/v1/cards/{{ id | urlencode }}"
+    verify_ssl: false
+    url: "https://192.0.2.10:7979/v1/cards/{{ id | urlencode }}"
     method: DELETE
     headers:
       Authorization: !secret herald_token
 
   announce:
-    url: "http://192.0.2.10:7979/v1/announce"
+    verify_ssl: false
+    url: "https://192.0.2.10:7979/v1/announce"
     method: POST
     headers:
       Authorization: !secret herald_token

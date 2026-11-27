@@ -35,6 +35,7 @@ SAFE_ERRORS = {
     "built-in category",
     "built-in look",
     "busy",
+    "certificate changed",
     "empty card",
     "method not allowed",
     "no pairing",
@@ -75,6 +76,18 @@ class ApiError(Exception):
         self.error = error
         self.lost = lost
 
+    @property
+    def requires_reauth(self):
+        return self.status == 401 or (
+            self.status == 0 and self.error == "certificate changed"
+        )
+
+
+def valid_pin(value):
+    return (
+        isinstance(value, str) and re.fullmatch(r"[0-9a-fA-F]{64}", value) is not None
+    )
+
 
 class AnnouncementPayload(aiohttp.payload.JsonPayload):
     sent = False
@@ -85,15 +98,28 @@ class AnnouncementPayload(aiohttp.payload.JsonPayload):
 
 
 class HeraldClient:
-    def __init__(self, hass, host, port, token=None):
+    def __init__(self, hass, host, port, token=None, pin=None):
         if not re.fullmatch(r"[a-zA-Z0-9:.%_-]+", host):
             raise ApiError()
-        self.base = URL.build(scheme="http", host=host, port=port)
+        self.base = URL.build(scheme="https", host=host, port=port)
         self.session = async_get_clientsession(hass)
+        if pin is not None and not valid_pin(pin):
+            raise ApiError()
+        self.fingerprint = (
+            aiohttp.Fingerprint(bytes.fromhex(pin)) if pin is not None else None
+        )
         self.token = token
 
     async def request(self, method, path, body=None, **params):
-        headers = {"Authorization": f"Bearer {self.token}"} if self.token else {}
+        if self.fingerprint is None and (
+            method != "GET" or path != "info" or body is not None or params
+        ):
+            raise ApiError()
+        headers = (
+            {"Authorization": f"Bearer {self.token}"}
+            if self.fingerprint and self.token
+            else {}
+        )
         kwargs = {"data": body} if isinstance(body, bytes) else {"json": body}
         announcement = None
         if method == "POST" and (
@@ -111,6 +137,7 @@ class HeraldClient:
                 self.base / "v1" / path,
                 params=params,
                 headers=headers,
+                ssl=self.fingerprint or False,
                 allow_redirects=False,
                 timeout=aiohttp.ClientTimeout(total=deadline),
                 **kwargs,
@@ -130,6 +157,8 @@ class HeraldClient:
                         else "request failed",
                     )
                 return data
+        except aiohttp.ServerFingerprintMismatch:
+            raise ApiError(0, "certificate changed") from None
         except aiohttp.ConnectionTimeoutError:
             raise ApiError() from None
         except (

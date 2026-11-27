@@ -106,7 +106,8 @@ final class Api {
         switch (path) {
             case "/v1/info":
                 method(req, "GET");
-                return Json.fields("ok", true, "app", "herald", "version", version, "api", 1,
+                return Json.fields("ok", true, "app", "herald", "version", version, "api", 2,
+                        "tls", true, "cert_sha256", backend.certSha256(), "pin_sha256", backend.pinSha256(),
                         "id", id, "name", settings.name(), "model", model, "pairing", backend.pairingAllowed());
             case "/v1/pair/start":
                 method(req, "POST");
@@ -126,11 +127,11 @@ final class Api {
                 return Json.fields("ok", true);
             case "/v1/status":
                 method(req, "GET");
-                Map<String, Object> status = Json.fields("ok", true, "version", version, "api", 1,
-                        "id", id, "name", settings.name(), "stream", events.stream, "event_seq", events.latest(),
+                Map<String, Object> status = Json.fields("ok", true, "version", version, "api", 2,
+                        "tls_failures", backend.tlsFailures(), "id", id, "name", settings.name(), "stream", events.stream, "event_seq", events.latest(),
                         "screen_on", backend.screenOn(), "overlay_allowed", backend.overlayAllowed(),
                         "sound_playing", backend.soundPlaying(), "quiet_seconds", 0, "settings_revision", settings.revision(),
-                        "mqtt", "off", "compat", "off");
+                        "mqtt", "off", "ntfy", "off", "compat", "off");
                 status.putAll(backend.statusFields());
                 status.putAll(cards.status());
                 status.put("chips", chips.rows().size());

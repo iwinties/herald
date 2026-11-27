@@ -18,12 +18,13 @@ from .const import DOMAIN
 from .services import update_snapshots
 
 
-def writable(value):
+def writable(value, parent=None):
     if isinstance(value, dict):
         return {
-            k: writable(v)
+            k: writable(v, k)
             for k, v in value.items()
             if k not in {"ok", "revision", "builtin", "password_set", "password"}
+            and not (parent == "ntfy" and k in {"token", "token_set"})
         }
     if isinstance(value, list):
         return [writable(v) for v in value]
@@ -41,7 +42,11 @@ class Box(DataUpdateCoordinator):
         )
         self.entry = entry
         self.client = HeraldClient(
-            hass, entry.data["host"], entry.data["port"], entry.data["token"]
+            hass,
+            entry.data["host"],
+            entry.data["port"],
+            entry.data["token"],
+            entry.data["cert_sha256"],
         )
         self.store = Store(hass, 1, f"herald.settings.{entry.unique_id}")
         self.snapshots = []
@@ -55,18 +60,22 @@ class Box(DataUpdateCoordinator):
         try:
             return await self.client.request(*args, **kwargs)
         except ApiError as exc:
-            if exc.status == 401 and not self.auth_failed:
+            if exc.requires_reauth and not self.auth_failed:
                 self.auth_failed = True
                 if self.event_task and self.event_task is not asyncio.current_task():
                     self.event_task.cancel()
-                self.entry.async_start_reauth(self.hass)
+                # HA handles ConfigEntryAuthFailed during setup. A loaded entry
+                # can also lose auth in an action or long poll, outside refresh.
+                if self.event_task is not None:
+                    self.update_interval = None
+                    self.entry.async_start_reauth(self.hass)
             raise
 
     async def _async_update_data(self):
         try:
             return await self.request("GET", "status")
         except ApiError as exc:
-            if exc.status == 401:
+            if exc.requires_reauth and self.event_task is None:
                 raise ConfigEntryAuthFailed("Pairing required") from None
             raise UpdateFailed(exc.error) from None
 

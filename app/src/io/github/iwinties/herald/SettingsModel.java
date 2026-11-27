@@ -10,8 +10,8 @@ import java.util.Set;
 import java.util.Map;
 
 final class SettingsModel {
-    static final List<String> SECTIONS = Collections.unmodifiableList(Arrays.asList("Looks", "Categories",
-            "Display", "Sound & voice", "Pairing & clients", "MQTT", "Compatibility", "Status", "About"));
+    static final List<String> SECTIONS = Collections.unmodifiableList(Arrays.asList("Setup", "Looks", "Categories",
+            "Display", "Sound & voice", "Pairing & clients", "MQTT", "ntfy", "Compatibility", "Status", "About"));
 
     static Map<Look,List<String>> lookTiles(Settings settings) {
         synchronized (settings) {
@@ -41,6 +41,7 @@ final class SettingsModel {
         rows.add(row("Version", status.get("version")));
         if (addresses == null || addresses.isEmpty()) rows.add(row("Address", null));
         else for (String address : addresses) rows.add(row("Address", address));
+        rows.add(row("API", status.get("api_status")));
         rows.add(row("Paired clients", clients == null ? null : clients.size()
                 + (clients.isEmpty() ? "" : " · " + String.join(", ", clients))));
         rows.add(row("Last card", status.get("last_card")));
@@ -48,9 +49,11 @@ final class SettingsModel {
         rows.add(row("Sound playing", status.get("sound_playing")));
         rows.add(row("Screen on", status.get("screen_on")));
         rows.add(row("MQTT", status.get("mqtt")));
+        rows.add(row("ntfy", status.get("ntfy")));
         rows.add(row("Compatibility", status.get("compat")));
         rows.add(row("Overlay permission", status.get("overlay_allowed")));
         rows.add(row("Battery exemption", status.get("battery_exempt")));
+        rows.add(row("Receiving", "On"));
         return rows;
     }
 

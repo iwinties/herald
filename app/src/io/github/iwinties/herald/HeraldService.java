@@ -54,10 +54,13 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.atomic.AtomicInteger;
+import javax.net.ssl.SSLServerSocket;
+import javax.net.ssl.SSLSocket;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Herald: a foreground service that listens on TCP port 7979 (Herald HTTP API v1),
+ * Herald: a foreground service that listens on TCP port 7979 (Herald HTTPS API 2),
  * keeps the speech clips Home Assistant pushes to it (ClipStore) and plays them, turns text
  * into speech with the on-device engine, or plays a recording sent with the request (a voice
  * note), all the same way. Jobs run one after another: chime, 200 ms, then the voice with a
@@ -68,7 +71,7 @@ import java.util.concurrent.TimeUnit;
  */
 public class HeraldService extends Service implements Backend {
     static final String TAG = "Herald";
-    static final String VERSION = "0.2.0";
+    static final String VERSION = "0.3.0";
     /** Name prefix of a voice note's temporary file in getCacheDir(). */
     static final String VOICE_PREFIX = "voice-";
     static final int RATE = 22050;
@@ -179,6 +182,9 @@ public class HeraldService extends Service implements Backend {
     private long compatRevision;
     private volatile String compatStatus = "off";
     private volatile int listenerPort;
+    private volatile TlsIdentity tlsIdentity;
+    private volatile boolean tlsUnavailable;
+    private final AtomicInteger tlsFailures = new AtomicInteger();
     private int listenerRevision;
     private Settings settings;
     private ClipStore clips;
@@ -201,16 +207,63 @@ public class HeraldService extends Service implements Backend {
     private Discovery discovery;
     private volatile String advertisedName;
     private MqttLink mqtt;
+    private NtfyLink ntfy;
+
+    String ntfyStatus() { return ntfy.status(); }
     private ChipBoard chips;
     private String deviceId;
     private Api api;
     private EventLog events;
 
     static HeraldService instance() { return instance; }
+    static final String STOP = "io.github.iwinties.herald.action.STOP";
+    // Requests, service lifecycle and Setup run on this process's main thread.
+    static boolean startPending, startRefused;
+    private boolean screenRegistered;
+
+    static boolean receiving(Context c) {
+        SharedPreferences p = c.getSharedPreferences("herald", MODE_PRIVATE);
+        Boolean stored = p.contains("receiving") ? p.getBoolean("receiving", false) : null;
+        boolean on = Setup.resolveReceiving(stored, p.contains("device_id"), p.contains("auth"), p.contains("settings"));
+        if (stored == null) p.edit().putBoolean("receiving", on).commit();
+        return on;
+    }
+
+    static boolean tryStart(Context c) {
+        try {
+            c.startForegroundService(new Intent(c, HeraldService.class));
+            startPending = instance == null;
+            startRefused = false;
+            return true;
+        } catch (IllegalStateException e) {
+            Log.w(TAG, "start refused", e);
+            startPending = false;
+            startRefused = true;
+            return false;
+        }
+    }
+
+    static boolean requestStart(Context c, boolean before) {
+        SharedPreferences p = c.getSharedPreferences("herald", MODE_PRIVATE);
+        p.edit().putBoolean("receiving", true).commit();
+        if (tryStart(c)) return true;
+        p.edit().putBoolean("receiving", Setup.afterStart(before, true)).commit();
+        return false;
+    }
+
     Auth auth() { return auth; }
     Settings settings() { return settings; }
     EventLog events() { return events; }
     String deviceId() { return deviceId; }
+    @Override public String certSha256() {
+        TlsIdentity identity = tlsIdentity;
+        return identity == null ? "" : identity.fingerprint();
+    }
+    @Override public String pinSha256() {
+        TlsIdentity identity = tlsIdentity;
+        return identity == null ? "" : identity.pin();
+    }
+    @Override public int tlsFailures() { return tlsFailures.get(); }
     String assignedName() { return discovery.assignedName(); }
 
     void changeSettings(Map<String,Object> patch) {
@@ -265,12 +318,28 @@ public class HeraldService extends Service implements Backend {
 
     @Override public void onCreate() {
         super.onCreate();
+        prefs = getSharedPreferences("herald", MODE_PRIVATE);
+        startPending = false;
+        try {
+            goForeground();
+        } catch (RuntimeException e) {
+            Log.e(TAG, "could not start in the foreground", e);
+            prefs.edit().putBoolean("start_error", true).commit();
+            stopSelf();
+            return;
+        }
+        boolean on = receiving(this);
+        prefs.edit().remove("start_error").commit();
+        if (!on) {
+            stopForeground(STOP_FOREGROUND_REMOVE);
+            stopSelf();
+            return;
+        }
         main = new Handler(Looper.getMainLooper());
         power = (PowerManager) getSystemService(Context.POWER_SERVICE);
         audio = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
         wake = power.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "herald:job");
         wake.setReferenceCounted(false);
-        goForeground();
         clips = new ClipStore(new File(getCacheDir(), "clips"), CLIP_CAP);
         speechDir = new File(getCacheDir(), "speech");
         File[] leftovers = speechDir.listFiles();
@@ -279,7 +348,6 @@ public class HeraldService extends Service implements Backend {
         if (notes != null) for (File f : notes) f.delete();
         requestIds = new RequestIds(new File(getFilesDir(), "request-ids.json"), System::currentTimeMillis);
         chimePcm = Chime.pcm(RATE);
-        prefs = getSharedPreferences("herald", MODE_PRIVATE);
         String id = prefs.getString("device_id", null);
         if (id == null) {
             id = UUID.randomUUID().toString();
@@ -297,6 +365,7 @@ public class HeraldService extends Service implements Backend {
                     if (!prefs.edit().putString("settings", json).commit()) throw new Api.Failure(500, "settings store failed");
                     Map<String,Object> doc = Json.parse(json);
                     configureCompat(doc);
+                    ntfy.configure(Settings.object(doc.get("ntfy"), "ntfy"));
                     mqtt.configure(Settings.object(doc.get("mqtt"), "mqtt"));
                     advertisedName = (String)Settings.object(doc.get("device"), "device").get("name");
                     refreshDiscovery();
@@ -311,8 +380,11 @@ public class HeraldService extends Service implements Backend {
         IntentFilter filter = new IntentFilter(Intent.ACTION_SCREEN_ON);
         filter.addAction(Intent.ACTION_SCREEN_OFF);
         registerReceiver(screenReceiver, filter);
+        screenRegistered = true;
         running = true;
         mqtt = new MqttLink(this, prefs, events, id, settings.mqttPrivate());
+        ntfy = new NtfyLink(getSharedPreferences("ntfy", MODE_PRIVATE), settings, doc ->
+                SpokenCards.post(new CardSpec(doc, settings), true, doc.get("announce"), settings, this, overlay.cards, requestIds));
         compat = new Compat(settings, overlay.cards, chips, System::currentTimeMillis, this, requestIds);
         configureCompat(settings.document());
         new Thread(this::listenCompat, "herald-compat").start();
@@ -324,36 +396,48 @@ public class HeraldService extends Service implements Backend {
         soundThread.start();
         soundHandler = new Handler(soundThread.getLooper());
         soundHandler.post(sampleSound);
+        ntfy.configure(settings.ntfyPrivate());
         new Thread(this::listen, "herald-http").start();
     }
 
-    @Override public int onStartCommand(Intent i, int flags, int id) { return START_STICKY; }
+    @Override public int onStartCommand(Intent i, int flags, int id) {
+        if (i != null && STOP.equals(i.getAction()) && !receiving(this)) {
+            prefs.edit().putBoolean("receiving", false).commit();
+            stopForeground(STOP_FOREGROUND_REMOVE);
+            stopSelf();
+            return START_NOT_STICKY;
+        }
+        return running ? START_STICKY : START_NOT_STICKY;
+    }
 
     @Override public void onDestroy() {
         instance = null;
         running = false;
-        mqtt.close();
-        discovery.close();
-        soundHandler.removeCallbacks(sampleSound);
-        soundThread.quitSafely();
-        unregisterReceiver(screenReceiver);
-        auth.close();
-        pairingWindow.close();
+        if (ntfy != null) ntfy.close();
+        if (mqtt != null) mqtt.close();
+        if (discovery != null) discovery.close();
+        if (soundHandler != null) soundHandler.removeCallbacks(sampleSound);
+        if (soundThread != null) soundThread.quitSafely();
+        if (screenRegistered) unregisterReceiver(screenReceiver);
+        if (auth != null) auth.close();
+        if (pairingWindow != null) pairingWindow.close();
 
         synchronized (listenerLock) {
             close(server);
             close(compatServer);
             listenerLock.notifyAll();
         }
-        stop();
-        overlay.close();
+        if (overlay != null) {
+            stop();
+            overlay.close();
+        }
         if (worker != null) worker.interrupt();
         synchronized (engineLock) {
             if (tts != null) tts.shutdown();
             tts = null;
             ttsReady = false;
         }
-        if (wake.isHeld()) wake.release();
+        if (wake != null && wake.isHeld()) wake.release();
         super.onDestroy();
     }
 
@@ -364,15 +448,8 @@ public class HeraldService extends Service implements Backend {
                 .setContentTitle("Herald")
                 .setSmallIcon(android.R.drawable.ic_lock_silent_mode_off)
                 .build();
-        try {
-            if (Build.VERSION.SDK_INT >= 34) {
-                startForeground(1, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
-            } else {
-                startForeground(1, n);
-            }
-        } catch (RuntimeException e) {
-            Log.e(TAG, "could not start in the foreground", e);
-        }
+        if (Build.VERSION.SDK_INT >= 34) startForeground(1, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
+        else startForeground(1, n);
     }
 
     // ---- Backend (called on request threads) ----
@@ -392,6 +469,7 @@ public class HeraldService extends Service implements Backend {
             fields.put("quiet_seconds", sound.quietSeconds(SystemClock.elapsedRealtime()));
         }
         fields.put("mqtt", mqtt.status());
+        fields.put("ntfy", ntfy.status());
         fields.put("compat", compatStatus);
         return fields;
     }
@@ -429,6 +507,10 @@ public class HeraldService extends Service implements Backend {
         Map<String,Object> status = statusFields();
         status.putAll(overlay.cards.status());
         status.put("version", VERSION);
+        synchronized (listenerLock) {
+            status.put("api_status", tlsUnavailable ? "TLS unavailable"
+                    : server != null && !server.isClosed() ? "HTTPS" : "Waiting");
+        }
         status.put("screen_on", screenOn());
         status.put("overlay_allowed", overlayAllowed());
         return status;
@@ -449,7 +531,7 @@ public class HeraldService extends Service implements Backend {
     @Override public boolean pairingAllowed() { return settings.pairingAllowed(); }
 
     @Override public boolean showPairingCode(String client, String code, int seconds) {
-        return pairingWindow.showCode(client, code, advertisedName, seconds);
+        return pairingWindow.showCode(client, code, advertisedName, seconds, certSha256());
     }
 
     @Override public void hidePairingCode() { pairingWindow.hide(); }
@@ -999,11 +1081,19 @@ public class HeraldService extends Service implements Backend {
     }
 
     private void listen() {
+        try {
+            tlsIdentity = AndroidTls.identity(this, deviceId);
+        } catch (java.security.GeneralSecurityException | IOException | RuntimeException e) {
+            tlsUnavailable = true;
+            Log.w(TAG, "TLS identity unavailable");
+            return;
+        }
         while (running) {
             int port = listenerPort;
-            ServerSocket s = null;
+            SSLServerSocket s = null;
             try {
-                s = new ServerSocket();
+                s = (SSLServerSocket) tlsIdentity.sslContext().getServerSocketFactory().createServerSocket();
+                TlsIdentity.configure(s);
                 s.setReuseAddress(true);
                 synchronized (listenerLock) {
                     if (!running) return;
@@ -1100,6 +1190,7 @@ public class HeraldService extends Service implements Backend {
     private void serve(Socket c, boolean compatibility) {
         try {
             c.setSoTimeout(READ_TIMEOUT_MS);
+            if (!compatibility && !TlsIdentity.handshake((SSLSocket) c, tlsFailures)) return;
             BufferedOutputStream out = new BufferedOutputStream(c.getOutputStream());
             if (compatibility) {
                 String peer = c.getInetAddress().getHostAddress();

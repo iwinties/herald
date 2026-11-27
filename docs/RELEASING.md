@@ -27,9 +27,10 @@ tools/release.sh build
 ```
 
 This runs `tools/build.sh` (JVM tests, packaging checks, signing) and writes
-`out/herald-<version>.apk`, `out/herald-<version>.apk.sha256` and
-`out/herald-<version>.release.json` (commit, version, APK and certificate SHA-256). Keep the
-three files together and never rebuild the same version: every later step checks the APK
+`out/herald-<version>.apk`, `out/herald-<version>.apk.sha256`, `out/herald-<version>.aab` and
+`out/herald-<version>.release.json` (commit, version, APK and AAB SHA-256, and APK signing certificate SHA-256).
+Keep the upload-signed AAB for manual submission to Google Play. The GitHub release carries the
+release-signed APK and its checksum. Keep all four candidate files together and never rebuild the same version: every later step checks the APK
 against that manifest. The signing key lives outside the repository in `HERALD_KEYS` (default
 `~/.config/herald`); back it up privately. An APK signed with another key cannot update an
 installed Herald, so losing the key means every box uninstalls and reinstalls.
@@ -60,6 +61,7 @@ recorded commit. Both need an authenticated GitHub CLI.
 
 ### 5. Roll out
 
+- **For 0.2 → 0.3:** Update every box first, then download the matching integration in HACS and restart Home Assistant. The old integration cannot connect once a box requires HTTPS. The new integration verifies and pins each upgraded box on first contact and retains its token without re-pairing. Update standalone scripts to pin every pairing and authenticated request. [Pairing guide](API.md#pairing-and-device-identity)
 - **Boxes:** install the released APK over the old one (same signing key, `adb install -r`; see
   docs/SETUP.md). A version that changes the settings schema says so in CHANGELOG.md and needs a
   clean install instead.

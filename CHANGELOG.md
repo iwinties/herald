@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.0
+
+- **Upgrading from 0.2.0:** Update every box in place first, then update the Herald integration in HACS and restart Home Assistant. A 0.2 integration cannot reach a 0.3 box. The 0.3 integration pins each upgraded box’s certificate on first contact and reuses its existing pairing.
+- The native API is HTTPS-only. Scripts must verify the box fingerprint and pin the public key on pairing and subsequent requests. [Pairing and device identity](docs/API.md#pairing-and-device-identity)
+- Fresh installs start with receiving off. Open **Setup** with the remote, grant overlay access, try a test card and choose **Start receiving**. A previously used 0.2 box keeps receiving on after upgrade. Herald no longer requests notification permission.
+- Subscribe to up to four ntfy topics on one server without Home Assistant. Cards are silent by default. Each topic can opt in to speaking priority-5 messages. [ntfy setup](docs/NTFY.md)
+- The Play-ready TV build produces a signed Android App Bundle alongside the GitHub APK and includes a named TV banner. [Privacy policy](docs/PRIVACY.md)
+
 ## 0.2.0
 
 - Cards can announce their title and message, use custom speech, and appear immediately or at voice start. Request IDs support safe spoken-card retries.

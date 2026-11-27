@@ -10,7 +10,7 @@ case ${1:-} in
     mkdir -p -m 700 "$HOME/.config/herald-adb"
     sudo docker run -d --rm --name herald-adb --network host --user "$(id -u):$(id -g)" \
       -e HOME=/adbhome -e ADB_MDNS_AUTO_CONNECT=0 -v "$HOME/.config/herald-adb:/adbhome/.android" \
-      -v "$repo/out:/apk:ro" herald-build:36-m3-1.11.1 adb -P 5038 nodaemon server
+      -v "$repo/out:/apk:ro" herald-build:36-m3-1.11.1-bt1.18.3 adb -P 5038 nodaemon server
     for second in $(seq 1 20); do
       if sudo docker exec herald-adb adb -P 5038 devices >/dev/null 2>&1; then
         exit 0

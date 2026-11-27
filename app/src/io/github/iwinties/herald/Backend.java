@@ -4,6 +4,9 @@ import java.util.Map;
 
 /** Android operations used by the pure API and pairing state machine. */
 interface Backend {
+    String certSha256();
+    String pinSha256();
+    int tlsFailures();
     Map<String, Object> statusFields();
     boolean soundPlaying();
     void ownVideoAudio(long generation, boolean playing);
