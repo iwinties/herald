@@ -6,13 +6,13 @@
 
 **By hand.** Copy `custom_components/herald` from the release tag into `<config>/custom_components/` so the manifest is at `<config>/custom_components/herald/manifest.json`, then restart Home Assistant.
 
-Boxes and the integration must run the same Herald version (0.3.0 for this integration). Upgrade all 0.2 boxes in place first, download 0.3.0 in HACS, then restart Home Assistant. The 0.2 integration cannot reach a 0.3 box during the transition. The integration targets HA 2026.10 or later; the offline test environment uses 2026.10.1. Releases and their order of rollout are described in [RELEASING.md](RELEASING.md).
+Boxes and the integration must run the same Herald version (0.4.0 for this integration). On each box, uninstall the previous app, install 0.4.0 and complete Setup. Download 0.4.0 in HACS and restart Home Assistant. Under **Settings → Devices & services → Herald**, delete the old entry for each box and add it again using the new installation’s device ID and certificate. The integration targets HA 2026.10 or later; the offline test environment uses 2026.10.1. Releases and their order of rollout are described in [RELEASING.md](RELEASING.md).
 
 ### Add a box
 
 In **Settings → Devices & services**, confirm a discovered Herald or choose **Add integration → Herald → Add a Herald box**. Enter the host and native HTTPS port (7979 unless changed). Wake the TV and enable overlay permission. Compare the fingerprint in the pairing dialog with the one on the TV, then enter the TV code if they match. Home Assistant pins the box's certificate and stores its token.
 
-After an upgrade from 0.2, Home Assistant automatically learns the certificate on first contact, confirms it over a second HTTPS connection and resumes using the existing token. An older box will be retried after it upgrades. A certificate change or revoked token stops authenticated requests and starts reauthentication. Compare the fingerprint and enter a fresh code to resume.
+A certificate change or revoked token stops authenticated requests and starts reauthentication. Compare the fingerprint and enter a fresh code to resume.
 
 If discovery sees the known UUID at a different address or port, open the repair issue. Home Assistant verifies the stored certificate and checks the UUID before moving the paired entry.
 

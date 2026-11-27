@@ -23,4 +23,4 @@ Run `tools/build.sh` with Docker to build the SDK image, run the JVM tests and p
 
 Maintainers follow [docs/RELEASING.md](docs/RELEASING.md): `tools/release.sh build` at a clean commit to create a versioned APK, its checksum, a separately signed Play AAB and a local release manifest in out/. Keep those files together. After checking that candidate, `publish` tags the recorded commit and attaches the same APK and checksum to a GitHub release; `verify` downloads the asset and checks its hash, certificate and remote tag. Publishing uses Git and the authenticated GitHub CLI. Pushes run CI. Installation on a device is manual.
 
-[0.3.0 upgrade notes](CHANGELOG.md#030) · [Privacy policy](docs/PRIVACY.md) · [Apache License 2.0](LICENSE)
+[0.4.0 upgrade notes](CHANGELOG.md#040) · [Privacy policy](docs/PRIVACY.md) · [Apache License 2.0](LICENSE)

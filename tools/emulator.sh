@@ -5,7 +5,7 @@ set -euo pipefail
 root=$(cd "$(dirname "$0")/.." && pwd)
 image=herald-emu:36
 name=herald-emu
-label=io.github.iwinties.herald.emulator
+label=co.tbrkr.herald.emulator
 docker=(sudo -n docker)
 d() { "${docker[@]}" "$@"; }
 usage() { echo "usage: $0 start | stop | adb <args> | checks <out/apk> <evidence.md> | ocr-pair --layout <sw> <sh> | ocr-pair <before.png> <code.png> [--mask N]" >&2; exit 2; }
@@ -247,7 +247,7 @@ import time
 import xml.etree.ElementTree as ET
 from PIL import Image, ImageChops, ImageFilter
 
-pkg = "io.github.iwinties.herald"
+pkg = "co.tbrkr.herald"
 activity = pkg + "/.SettingsActivity"
 adb = ["adb", "-s", "emulator-5554"]
 os.umask(0o077)

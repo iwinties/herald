@@ -1,5 +1,5 @@
 #!/bin/sh
-# Build the Herald app (io.github.iwinties.herald) in a container: run the JVM tests of the pure
+# Build the Herald app (co.tbrkr.herald) in a container: run the JVM tests of the pure
 # parts, then build the signed APK, upload-signed AAB and release-signed universal APK.
 # usage: tools/build.sh      (from any directory)
 # env:   DOCKER (default "sudo docker"), HERALD_KEYS (default $HOME/.config/herald)
@@ -34,17 +34,17 @@ SDK=/opt/android-sdk
 BT=$SDK/build-tools/36.1.0
 AJ=$SDK/platforms/android-36/android.jar
 w=/tmp/build
-p=/src/app/src/io/github/iwinties/herald
+p=/src/app/src/co/tbrkr/herald
 rm -rf "$w"
 mkdir -p "$w/test" "$w/classes" "$w/dex"
 
 javac -d "$w/test" "$p/TlsIdentity.java" "$p/Http.java" "$p/Json.java" "$p/Api.java" "$p/Auth.java" "$p/EventLog.java" "$p/Backend.java" \
   "$p/Compat.java" "$p/MqttTopics.java" "$p/Ntfy.java" "$p/SoundDecision.java" "$p/Settings.java" "$p/Style.java" "$p/Setup.java" "$p/SettingsModel.java" "$p/PairingText.java" "$p/SpokenCards.java" "$p/ChipLayout.java" "$p/ChipPulse.java" "$p/KeyPolicy.java" "$p/CardFrame.java" "$p/Look.java" "$p/Category.java" "$p/Cidr.java" \
   "$p/AnnounceSpec.java" "$p/RequestIds.java" "$p/CardSpec.java" "$p/CardBoard.java" "$p/MediaState.java" "$p/ChipSpec.java" "$p/ChipBoard.java" "$p/ImageStore.java" \
-  "$p/ClipStore.java" "$p/Chime.java" "$p/AudioTiming.java" /src/app/test/io/github/iwinties/herald/PureTest.java >&2
+  "$p/ClipStore.java" "$p/Chime.java" "$p/AudioTiming.java" /src/app/test/co/tbrkr/herald/PureTest.java >&2
 keytool -genkeypair -keystore "$w/tls-test.p12" -storetype PKCS12 -storepass herald-test \
   -keypass herald-test -alias test -keyalg EC -groupname secp256r1 -dname CN=herald-test -validity 2
-java -ea -Dherald.tls.fixture="$w/tls-test.p12" -cp "$w/test" io.github.iwinties.herald.PureTest
+java -ea -Dherald.tls.fixture="$w/tls-test.p12" -cp "$w/test" co.tbrkr.herald.PureTest
 
 ensure_key() (
   name=$1

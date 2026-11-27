@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.0
+
+- The Android package is now `co.tbrkr.herald`. Android requires a clean install. On each TV, uninstall the old Herald in **Settings → Apps**, or run `adb -s '<serial>' uninstall io.github.iwinties.herald`. Install 0.4.0, open **Herald → Setup** and enable receiving again.
+- The new installation has a new device ID and certificate. Settings and pairings do not carry over. Update Herald to 0.4.0 in HACS, restart Home Assistant, then delete the old Herald box entry and add the box again. [Pair a box](docs/HOME_ASSISTANT.md#add-a-box)
+
 ## 0.3.0
 
 - **Upgrading from 0.2.0:** Update every box in place first, then update the Herald integration in HACS and restart Home Assistant. A 0.2 integration cannot reach a 0.3 box. The 0.3 integration pins each upgraded box’s certificate on first contact and reuses its existing pairing.

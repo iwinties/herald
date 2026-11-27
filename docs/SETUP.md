@@ -4,6 +4,8 @@ Use an Android TV or Google TV device running Android 8.0 (API 26) or later, on 
 
 ### Set up with the remote
 
+If an earlier Herald version is installed, uninstall it in **TV Settings → Apps → Herald** first. Version 0.4.0 uses a new Android package. You will need to configure it and pair your clients again.
+
 Install the APK and open **Herald → Setup** on the TV.
 
 1. Select **Show cards over other apps** and allow Herald to display overlays. If the TV has no suitable settings screen, the row shows the ADB command.
@@ -12,13 +14,13 @@ Install the APK and open **Herald → Setup** on the TV.
 4. Select **Start receiving** to accept requests. The choice survives reboots and updates. **Stop receiving** turns it off. While receiving is off, Setup and About remain available. If startup fails, retry here.
 5. **Privacy** describes what Herald stores, how to remove it and where to find the policy. You can also open it from About.
 
-A fresh install starts with receiving off. An upgrade from a previously used 0.2 installation keeps receiving on. Herald does not request notification permission. Android 13 and later show the foreground service in the system’s running-apps list. Older TVs may list its minimum-importance notice in the notifications panel.
+A fresh install starts with receiving off. Herald does not request notification permission. Android 13 and later show the foreground service in the system’s running-apps list. Older TVs may list its minimum-importance notice in the notifications panel.
 
 ### Install with ADB
 
 Enable developer options and debugging on the box. If using **Wireless debugging → Pair device with pairing code**, run `adb pair <box>:<pairing-port>` and enter the code at the prompt. Then use the **connection** port shown on the Wireless debugging screen. For a USB connection, approve the computer on the TV and use the serial listed by `adb devices`.
 
-If 0.1.0 is installed, select Herald's Uninstall action on the box or run `adb -s '<serial>' uninstall io.github.iwinties.herald` after connecting. Then proceed with the fresh install.
+When upgrading from an earlier release, uninstall the old app before installing 0.4.0. The [upgrade notes](../CHANGELOG.md#040) include the ADB uninstall command.
 
 From a computer with Android platform-tools (`adb` on PATH) and either `aapt2` or `sha256sum`:
 
@@ -41,14 +43,14 @@ tools/install-adb.sh '<box>:<connection-port>' --start-receiving --port 8080
 ```bash
 set -eo pipefail
 serial=192.0.2.10:5555
-version=0.3.0
+version=0.4.0
 apk="herald-$version.apk"
 (cd out && sha256sum -c "$apk.sha256")
 tools/adb.sh start
 trap 'tools/adb.sh stop' EXIT
 tools/adb.sh connect "$serial"
 tools/adb.sh -s "$serial" install -r "/apk/$apk"
-installed=$(tools/adb.sh -s "$serial" shell pm path io.github.iwinties.herald | tr -d '\r')
+installed=$(tools/adb.sh -s "$serial" shell pm path co.tbrkr.herald | tr -d '\r')
 [[ $installed == package:/* ]]
 device_hash=$(tools/adb.sh -s "$serial" shell sha256sum "${installed#package:}")
 release_hash=$(sha256sum <"out/$apk")
@@ -65,12 +67,12 @@ The container sees the host’s `out/herald-<version>.apk` as `/apk/herald-<vers
 set -eo pipefail
 serial=192.0.2.10:5555
 adb connect "$serial"
-adb -s "$serial" install -r herald-0.3.0.apk
-adb -s "$serial" shell appops set io.github.iwinties.herald SYSTEM_ALERT_WINDOW allow
-adb -s "$serial" shell dumpsys deviceidle whitelist +io.github.iwinties.herald
-adb -s "$serial" shell am start -W -n io.github.iwinties.herald/.SettingsActivity
-result=$(adb -s "$serial" shell am broadcast -a io.github.iwinties.herald.action.ENABLE_RECEIVING \
-  -n io.github.iwinties.herald/.ShellReceiver)
+adb -s "$serial" install -r herald-0.4.0.apk
+adb -s "$serial" shell appops set co.tbrkr.herald SYSTEM_ALERT_WINDOW allow
+adb -s "$serial" shell dumpsys deviceidle whitelist +co.tbrkr.herald
+adb -s "$serial" shell am start -W -n co.tbrkr.herald/.SettingsActivity
+result=$(adb -s "$serial" shell am broadcast -a co.tbrkr.herald.action.ENABLE_RECEIVING \
+  -n co.tbrkr.herald/.ShellReceiver)
 printf '%s\n' "$result"
 [[ $result =~ result=-1([^0-9]|$) ]] || { echo "Start refused" >&2; exit 1; }
 ```
@@ -79,7 +81,7 @@ After `result=-1`, verify that the listener actually started. In the [API guide]
 
 ```bash
 curl -q --noproxy '*' --insecure --pinnedpubkey "sha256//${pin:?verified pin required}" -fsS "$box/v1/info" |
-  jq -e '.app == "herald" and .api == 2 and .version == "0.3.0"'
+  jq -e '.app == "herald" and .api == 2 and .version == "0.4.0"'
 ```
 
 For USB, use your connected serial and omit `adb connect`. Before the API guide’s bootstrap, run `adb -s "$serial" forward tcp:0 tcp:7979` and use `127.0.0.1:<returned-port>` as the address. After the pinned check, remove the forward with `adb -s "$serial" forward --remove tcp:<returned-port>`, substituting the actual port.
@@ -119,11 +121,19 @@ The native listener defaults to TCP 7979; optional TvOverlay compatibility uses 
 Uninstalling removes Herald and its local settings and paired credentials. To remove the exemption first and uninstall:
 
 ```sh
-adb -s "$serial" shell dumpsys deviceidle whitelist -io.github.iwinties.herald
-adb -s "$serial" uninstall io.github.iwinties.herald
+adb -s "$serial" shell dumpsys deviceidle whitelist -co.tbrkr.herald
+adb -s "$serial" uninstall co.tbrkr.herald
 ```
 
 To revoke wireless debugging trust on the TV, open **Wireless debugging → Paired devices**, select the computer and choose **Forget**.
+
+### 0.4.0 support matrix
+
+| Target | Coverage | Status |
+|---|---|---|
+| Android TV emulator | Fresh install, HTTPS, pairing, receiving across restarts, ntfy delivery and bundle-derived APK | Planned |
+| Physical Android TV / Google TV | Removal of the old package, fresh setup, grants and pinned pairing | Planned |
+| Home Assistant | Matching integration, removal of the old box entry and pairing the new installation | Planned |
 
 ### 0.3.0 support matrix
 

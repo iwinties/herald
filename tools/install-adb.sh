@@ -27,7 +27,7 @@ done
 apk_version=
 if command -v aapt2 >/dev/null; then
     badging=$(aapt2 dump badging "$apk")
-    apk_version=$(sed -n "s/^package: name='io\.github\.iwinties\.herald'.* versionName='\([^']*\)'.*/\1/p" <<<"$badging")
+    apk_version=$(sed -n "s/^package: name='co\.tbrkr\.herald'.* versionName='\([^']*\)'.*/\1/p" <<<"$badging")
     [[ -n $apk_version ]] || fail "APK is missing Herald's package name or versionName"
 fi
 device() { adb -s "$serial" "$@"; }
@@ -55,7 +55,7 @@ elif [ "$listed" != device ]; then
     fail "ADB target $serial is $listed"
 fi
 [ "$(device get-state)" = device ] || fail "ADB device unavailable"
-pkg=io.github.iwinties.herald
+pkg=co.tbrkr.herald
 device install -r "$apk"
 installed=$(device shell pm path "$pkg")
 [[ $installed == package:* ]] || fail "package not installed"
