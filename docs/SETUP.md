@@ -131,9 +131,9 @@ To revoke wireless debugging trust on the TV, open **Wireless debugging → Pair
 
 | Target | Coverage | Status |
 |---|---|---|
-| Android TV emulator | Fresh install, HTTPS, pairing, receiving across restarts, ntfy delivery and bundle-derived APK | Planned |
-| Physical Android TV / Google TV | Removal of the old package, fresh setup, grants and pinned pairing | Planned |
-| Home Assistant | Matching integration, removal of the old box entry and pairing the new installation | Planned |
+| Android TV emulator | Fresh install, HTTPS, pairing, receiving across restarts, ntfy delivery and bundle-derived APK | Passed: 12 checks on the 0.4.0 build (emulator 37.3.10, android-36 TV image revision 4) |
+| Physical Android TV / Google TV | Removal of the old package, fresh setup, grants and pinned pairing | Passed on an onn 4K Pro (Android 14): the 0.3.0 package removed, 0.4.0 installed and set up, TLS 1.2 and 1.3 with matching digests, pinned pairing (2026-11-27) |
+| Home Assistant | Matching integration, removal of the old box entry and pairing the new installation | Offline suite passed (79 tests on the 0.4.0 build); live: old box entry deleted, the new installation paired with the fingerprint check, a card and a spoken announcement passed on Home Assistant 2026.10.1 |
 
 ### 0.3.0 support matrix
 
