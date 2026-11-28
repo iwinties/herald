@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.0
+
+- Preview a Look at its actual screen position. Press OK on its thumbnail for a full-size preview, then press OK or Back to return. Each settings screen remembers its own **More options** choice. MQTT, ntfy and TvOverlay are together under **Integrations**. The new megaphone icon identifies Herald on the TV and in Home Assistant.
+- Live camera cards show video at full brightness and clip it inside the rounded frame. The border and shadow stay visible. Video cards receive pointer input inside their window. Touches outside a corner window can reach the underlying app.
+- Customize action buttons with square, rounded or pill shapes, compact to roomy spacing, and separate fill and text colors for normal and focused buttons. Try them with **Preview buttons**. [Button styling](docs/STYLES.md#buttons-and-playback)
+- Home Assistant can guide you through a box address change using its saved certificate and identity. The integration includes Marketplace validation and updated installation and feedback links.
+- **Upgrading from 0.4.0:** Install the APK over the existing app on each TV. Update Herald in HACS or Marketplace and restart Home Assistant. Both settings and pairings carry over. For older installations, follow the [package migration notes](#040).
+
 ## 0.4.0
 
 - The Android package is now `co.tbrkr.herald`. Android requires a clean install. On each TV, uninstall the old Herald in **Settings → Apps**, or run `adb -s '<serial>' uninstall io.github.iwinties.herald`. Install 0.4.0, open **Herald → Setup** and enable receiving again.

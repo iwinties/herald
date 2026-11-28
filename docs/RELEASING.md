@@ -11,6 +11,7 @@ Set the same version in every place that names it, in one commit on `main`:
 | File | Field |
 |---|---|
 | `app/AndroidManifest.xml` | `android:versionName` (and raise `android:versionCode`) |
+| `app/src/co/tbrkr/herald/HeraldService.java` | `VERSION` reported by the running receiver |
 | `custom_components/herald/manifest.json` | `version` |
 | `CHANGELOG.md` | a `## <version>` section |
 | `docs/SETUP.md` | a `<version>` support matrix with every row `planned` |

@@ -46,7 +46,7 @@ final class VideoCard implements MediaState.Output {
                     .build();
             player.setTrackSelectionParameters(player.getTrackSelectionParameters().buildUpon()
                     .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, MediaState.muted(spec)).build());
-            player.setVideoSurfaceView(view.surface);
+            player.setVideoTextureView(view.videoTexture);
             player.addListener(new Player.Listener() {
                 @Override public void onRenderedFirstFrame() {
                     if (state.owns(generation)) state.firstFrame(generation);

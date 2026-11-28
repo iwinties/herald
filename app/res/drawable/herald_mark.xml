@@ -1,0 +1,12 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="64dp" android:height="64dp"
+    android:viewportWidth="128" android:viewportHeight="128">
+    <!-- The downward fold of the handle doubles as a heraldic pennant. -->
+    <path android:fillColor="#FF6556" android:pathData="M27,78 L51,80 L47,108 L38,101 L27,112 Z"/>
+    <path android:fillColor="#CE403E" android:pathData="M27,80 L51,80 L49,94 Z"/>
+    <path android:fillColor="#FFB720" android:pathData="M10,75 L13,65 L20,63 L69,15 L84,82 L27,81 L17,85 Z"/>
+    <path android:fillColor="#D98408" android:pathData="M17,85 L21,77 L66,63 L84,82 L27,81 Z"/>
+    <path android:fillColor="#FFE9BC" android:pathData="M69,15 L81,18 L93,44 L97,70 L90,84 L84,82 L66,64 L59,40 Z"/>
+    <path android:fillColor="#102D51" android:pathData="M70,22 L79,26 L89,47 L90,69 L87,75 L76,64 L66,39 Z"/>
+    <path android:fillColor="#FFB720" android:pathData="M92,34 L110,17 L114,25 L95,38 Z M97,47 L119,42 L116,53 L97,51 Z"/>
+</vector>

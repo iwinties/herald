@@ -1,0 +1,16 @@
+name: Request a feature
+description: Describe an automation you would like Herald to support.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: scenario
+    attributes:
+      label: What are you trying to do?
+      description: What starts the automation? What should someone see or hear, and what should happen next?
+    validations:
+      required: true
+  - type: textarea
+    id: workaround
+    attributes:
+      label: How do you handle it today?
+      description: A short example helps. Leave out private details.

@@ -4,12 +4,12 @@ Use an Android TV or Google TV device running Android 8.0 (API 26) or later, on 
 
 ### Set up with the remote
 
-If an earlier Herald version is installed, uninstall it in **TV Settings → Apps → Herald** first. Version 0.4.0 uses a new Android package. You will need to configure it and pair your clients again.
+**Updating from 0.4.0?** Install the new APK over the existing Herald app. Your settings, permissions and pairings carry over. If your TV still has 0.3.0 or earlier, follow the [package migration](../CHANGELOG.md#040) and pair the new app after installation.
 
 Install the APK and open **Herald → Setup** on the TV.
 
 1. Select **Show cards over other apps** and allow Herald to display overlays. If the TV has no suitable settings screen, the row shows the ADB command.
-2. **Battery (optional)** opens the battery optimization settings. Exempt Herald if MQTT or media fetches need to keep working while the TV sleeps.
+2. **More options → Battery (optional)** opens the battery optimization settings. Exempt Herald if MQTT or media fetches need to keep working while the TV sleeps.
 3. Select **Test card** to show “Herald test” above the app. Press Back to dismiss it or wait eight seconds. This works before you enable receiving.
 4. Select **Start receiving** to accept requests. The choice survives reboots and updates. **Stop receiving** turns it off. While receiving is off, Setup and About remain available. If startup fails, retry here.
 5. **Privacy** describes what Herald stores, how to remove it and where to find the policy. You can also open it from About.
@@ -20,7 +20,7 @@ A fresh install starts with receiving off. Herald does not request notification 
 
 Enable developer options and debugging on the box. If using **Wireless debugging → Pair device with pairing code**, run `adb pair <box>:<pairing-port>` and enter the code at the prompt. Then use the **connection** port shown on the Wireless debugging screen. For a USB connection, approve the computer on the TV and use the serial listed by `adb devices`.
 
-When upgrading from an earlier release, uninstall the old app before installing 0.4.0. The [upgrade notes](../CHANGELOG.md#040) include the ADB uninstall command.
+Use an in-place install when updating from 0.4.0. Only versions through 0.3.0 used the old Android package.
 
 From a computer with Android platform-tools (`adb` on PATH) and either `aapt2` or `sha256sum`:
 
@@ -43,7 +43,7 @@ tools/install-adb.sh '<box>:<connection-port>' --start-receiving --port 8080
 ```bash
 set -eo pipefail
 serial=192.0.2.10:5555
-version=0.4.0
+version=0.5.0
 apk="herald-$version.apk"
 (cd out && sha256sum -c "$apk.sha256")
 tools/adb.sh start
@@ -67,7 +67,7 @@ The container sees the host’s `out/herald-<version>.apk` as `/apk/herald-<vers
 set -eo pipefail
 serial=192.0.2.10:5555
 adb connect "$serial"
-adb -s "$serial" install -r herald-0.4.0.apk
+adb -s "$serial" install -r herald-0.5.0.apk
 adb -s "$serial" shell appops set co.tbrkr.herald SYSTEM_ALERT_WINDOW allow
 adb -s "$serial" shell dumpsys deviceidle whitelist +co.tbrkr.herald
 adb -s "$serial" shell am start -W -n co.tbrkr.herald/.SettingsActivity
@@ -81,7 +81,7 @@ After `result=-1`, verify that the listener actually started. In the [API guide]
 
 ```bash
 curl -q --noproxy '*' --insecure --pinnedpubkey "sha256//${pin:?verified pin required}" -fsS "$box/v1/info" |
-  jq -e '.app == "herald" and .api == 2 and .version == "0.4.0"'
+  jq -e '.app == "herald" and .api == 2 and .version == "0.5.0"'
 ```
 
 For USB, use your connected serial and omit `adb connect`. Before the API guide’s bootstrap, run `adb -s "$serial" forward tcp:0 tcp:7979` and use `127.0.0.1:<returned-port>` as the address. After the pinned check, remove the forward with `adb -s "$serial" forward --remove tcp:<returned-port>`, substituting the actual port.
@@ -98,19 +98,19 @@ Use the [HTTPS pairing commands](API.md#pairing-and-device-identity) or the [Hom
 
 Open Herald from the launcher. Use the D-pad to choose a section, Left/Right to change choices and OK for text entry. Changes save immediately. BACK moves out through the current editor, list and sections.
 
-| Section | Controls |
-|---|---|
-| Setup | Overlay access, optional battery exemption, test card, receiving and privacy |
-| Looks | Preview tiles, press OK for a real test card, hold OK to assign a category, create and edit custom looks |
-| Categories | Pick a look, change Announce and individual style fields, Send test, reset, add or delete custom categories |
-| Display | Card cap, local night times, chip look, placement and pixel shift, sticky cap and focus while playing |
-| Sound & voice | TV and speaker volumes, night policy, chime, separate TV and box voice tests, chime test |
-| Pairing & clients | Enable pairing, open a code or remove an existing client |
-| MQTT | Broker connection, TLS, credentials, topics, discovery and commands |
-| ntfy | Server, token, topics, catch-up and per-topic speech ([ntfy setup](NTFY.md)) |
-| Compatibility | Second listener, port, sender allowlist and default category |
-| Status | Active addresses and port, paired clients, last card and audio, sound, screen, MQTT, compatibility and permissions |
-| About | Name and API port, device identity, address, versions, permissions, recent events |
+Each screen remembers its own **More options** choice on this TV. Open **Integrations** for MQTT, ntfy and TvOverlay. Back returns to the integration you selected in the list.
+
+| Section | Main controls | More options |
+|---|---|---|
+| Setup | Overlay access, test card, receiving, privacy | Battery exemption |
+| Pairing & clients | Pair a client, compare the fingerprint, manage paired clients | Allow pairing (also visible directly if disabled) |
+| Looks | Card thumbnails, OK for a full-size eight-second preview, hold OK to assign a category | Create or edit a custom look. Its editor has separate fine styling and button colors |
+| Categories | Choose a category, assign a look, set speech, preview buttons or send a test | Add a category from the list. In an editor, fine-tune appearance, reset or remove a custom category |
+| Display | Visible cards, night hours, chip look and position | Pixel shift, sticky duration, button focus during playback |
+| Sound & voice | TV volume, box speaker volume, chime | Night policy and voice or chime tests |
+| Integrations | MQTT broker and credentials, ntfy server and topics, TvOverlay listener and allowed senders | Each integration has its own disclosure for broker options, catch-up, or listener port and category |
+| Status | Addresses, API, clients, latest card and audio | Playback, screen, connection and permission details |
+| About | Version, privacy and receiver name | API port, identity, addresses and diagnostics |
 
 Pickers wrap at the ends and move to the next legal step from custom API values. Volume and opacity step by five, times by 30 minutes and visible count by one. Duration includes until cleared, one-second steps below ten, five-second steps up to 60 and 30-second steps thereafter. The color pickers offer 12 colors; HTTP accepts any #RRGGBB.
 
@@ -126,6 +126,15 @@ adb -s "$serial" uninstall co.tbrkr.herald
 ```
 
 To revoke wireless debugging trust on the TV, open **Wireless debugging → Paired devices**, select the computer and choose **Forget**.
+
+### 0.5.0 support matrix
+
+| Target | Coverage |
+|---|---|
+| Android TV settings | Native Android rendering and remote navigation checked at 1280×720 and 1920×1080 during development. |
+| Android build and Home Assistant | JVM, packaging and offline integration tests run for the release. Public results appear under [Herald CI](https://github.com/iwinties/herald/actions/workflows/ci.yml). |
+| Physical Google TV | See the [release notes](https://github.com/iwinties/herald/releases/tag/v0.5.0) for in-place installation and receiver checks after publication. |
+| Android TV emulator and Cast speakers | No release-specific emulator session or physical speaker playback check. |
 
 ### 0.4.0 support matrix
 

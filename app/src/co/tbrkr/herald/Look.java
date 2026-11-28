@@ -12,9 +12,14 @@ import java.util.Set;
 final class Look {
     static final List<String> BUILTIN_IDS = Collections.unmodifiableList(Arrays.asList(
             "classic", "glass", "minimal", "banner", "alert", "pill"));
-    static final Set<String> VISUAL_KEYS = Collections.unmodifiableSet(new LinkedHashSet<>(Arrays.asList(
+    static final Set<String> VISUAL_KEYS;
+    static {
+        Set<String> keys = new LinkedHashSet<>(Arrays.asList(
             "placement", "size", "text_size", "background", "opacity", "layout", "corner", "border", "border_color",
-            "shadow", "glow", "accent_style", "title_color", "text_color", "title_weight", "label", "animation")));
+            "shadow", "glow", "accent_style", "title_color", "text_color", "title_weight", "label", "animation"));
+        keys.addAll(Style.BUTTON_DEFAULTS.keySet());
+        VISUAL_KEYS = Collections.unmodifiableSet(keys);
+    }
     private static final Style DEFAULTS = Style.defaults("info", "#4FC3F7", 10, "queue", "medium", "normal");
     static final Map<String, Object> BASE;
     private static final Map<String, Look> BUILTINS = new LinkedHashMap<>();
@@ -25,6 +30,7 @@ final class Look {
         BASE = Collections.unmodifiableMap(base);
         Map<String, Object> classic = new LinkedHashMap<>(base);
         classic.keySet().removeAll(Arrays.asList("placement", "size", "text_size", "animation"));
+        classic.keySet().removeAll(Style.BUTTON_DEFAULTS.keySet());
         builtin("classic", classic, Json.fields());
         builtin("glass", classic, Json.fields("corner", "large", "border", "thin", "border_color", "#5A6272",
                 "shadow", "soft", "accent_style", "badge", "background", "#1C202A", "opacity", 60));

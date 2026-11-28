@@ -2,11 +2,19 @@
 
 ### Install
 
-**With HACS (recommended).** In HACS open the menu (⋮) → **Custom repositories**, add `https://github.com/iwinties/herald` with type **Integration**, then open **Herald** and choose **Download**, picking the latest release. Restart Home Assistant. New releases then appear as updates of Herald in HACS: download the update and restart again.
+Install Herald on both the TV and Home Assistant. Each TV box and the HA integration must run the same Herald version. This integration requires Home Assistant 2026.10 or newer.
 
-**By hand.** Copy `custom_components/herald` from the release tag into `<config>/custom_components/` so the manifest is at `<config>/custom_components/herald/manifest.json`, then restart Home Assistant.
+1. **On the TV** (Android TV or Google TV, Android 8 or newer), sideload the APK from the [Herald release](https://github.com/iwinties/herald/releases/latest). In **Herald → Setup**, allow cards over other apps, try **Test card**, then select **Start receiving**. [TV setup guide](SETUP.md)
+2. **In Home Assistant**, choose the instructions for your version below. Install the integration version that matches the TV APK, then restart Home Assistant.
+3. [Pair the box and send the first card](#add-a-box). You can [tell us which TV worked or where you got stuck](https://github.com/iwinties/herald/issues/1).
 
-Boxes and the integration must run the same Herald version (0.4.0 for this integration). On each box, uninstall the previous app, install 0.4.0 and complete Setup. Download 0.4.0 in HACS and restart Home Assistant. Under **Settings → Devices & services → Herald**, delete the old entry for each box and add it again using the new installation’s device ID and certificate. The integration targets HA 2026.10 or later; the offline test environment uses 2026.10.1. Releases and their order of rollout are described in [RELEASING.md](RELEASING.md).
+**HA 2026.11 and newer — Marketplace.** [Open Herald in your Marketplace](https://my.home-assistant.io/redirect/hacs_repository/?owner=iwinties&repository=herald&category=integration), or go to **Settings → Marketplace → Add from link**, enter `https://github.com/iwinties/herald`, and select **Add**. Connect GitHub if prompted. If asked for the type, select **Integration**. Open **Herald** and choose **Install**.
+
+**HA 2026.10 — HACS.** In HACS, open the menu (⋮) → **Custom repositories**, enter the same repository URL, and choose **Integration**. Open **Herald** and select **Download**.
+
+**Manual installation.** Copy the `custom_components/herald` folder from the matching release tag into `<config>/custom_components/`. The manifest should be at `<config>/custom_components/herald/manifest.json`. Restart Home Assistant.
+
+**Updating from 0.4.0?** Install 0.5.0 over the existing TV app on each box, update Herald in HACS or Marketplace, then restart Home Assistant. Keep the existing box entries and pairings. If a TV is on 0.3.0 or earlier, follow the [package migration](../CHANGELOG.md#040) before pairing it again.
 
 ### Add a box
 
@@ -49,9 +57,21 @@ data:
   device_id: ["<box-device-id>"]
   id: update
   title: Update available
-  message: Press OK to acknowledge
-  buttons: [{id: ack, label: OK, action: event}]
-  style: {duration: 30}
+  message: Acknowledge this update or dismiss it for now.
+  style:
+    duration: 30
+    button_shape: pill
+    button_spacing: roomy
+    button_focus_background: "#FFFFFF"
+    button_focus_text_color: "#111827"
+  buttons:
+    - id: ack
+      label: Acknowledge
+      action: event
+      style: {background: "#245C46", text_color: "#FFFFFF"}
+    - id: later
+      label: Later
+      action: dismiss
 ```
 
 Pass a named `look` and override individual fields with `style`. For stills, use image.camera (HA snapshot), image.media, image.path (allowlisted), image.url, image.data or image.key. HA pushes local image bytes (up to 2 MiB) under a content-derived key after checking the cache. For video choose video.url or video.camera; the latter must supply a stream source. Both support muted, tcp and timeout.

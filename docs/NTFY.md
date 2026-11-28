@@ -1,11 +1,11 @@
 # Show ntfy messages on your TV
 
-Herald can show messages from up to four topics on one ntfy server. Receiving must be on in **Setup**. To subscribe, open **ntfy** after **MQTT** in the TV settings.
+Herald can show messages from up to four topics on one ntfy server. Receiving must be on in **Setup**. To subscribe, open **Integrations → ntfy** in the TV settings.
 
 1. Set **Server** to your ntfy base URL. The default is `https://ntfy.sh`. You can include a path prefix. Leave off the trailing slash.
 2. For a protected topic, enter a bearer token in **Token**. The TV shows whether a token is set. Use **Clear token** to remove it.
 3. Choose **Add topic** and enter the exact topic name. Add a label for messages that arrive without a title. Choose a category and, optionally, a look. Turn on **Speak priority 5** for each topic you want to hear.
-4. Set **Catch-up (seconds)** and switch **Enabled** on. **Status** shows the combined connection state. Use **Remove topic** to unsubscribe from one topic, or turn **Enabled** off to stop all streams.
+4. Under **More options**, set **Catch-up (seconds)** and switch **Enabled** on. **Status** shows the combined connection state. Use **Remove topic** to unsubscribe from one topic, or turn **Enabled** off to stop all streams.
 
 ## Set up through the API
 

@@ -1,10 +1,6 @@
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="108dp" android:height="108dp"
-    android:viewportWidth="108" android:viewportHeight="108">
-  <path android:fillColor="#1E2A38" android:pathData="M0,0H108V108H0Z"/>
-  <group android:translateX="18" android:translateY="18"
-      android:scaleX="3" android:scaleY="3">
-    <path android:fillColor="#FFF176"
-        android:pathData="M3,8H10L21,3V19L10,14H8L10,21H6L4,14H3Q2,14 2,13V9Q2,8 3,8Z"/>
-  </group>
-</vector>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/herald_ink"/>
+    <item>
+        <inset android:drawable="@drawable/herald_mark" android:inset="6%"/>
+    </item>
+</layer-list>

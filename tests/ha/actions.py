@@ -32,9 +32,9 @@ async def exercise(hass, a, b, root):
             "timeout": 10,
         },
         icon="none",
-        buttons=[{"id": "ok", "label": "OK"}],
+        buttons=[{"id": "ok", "label": "OK", "style": {"background": "#305478"}}],
         priority="high",
-        style={"duration": 3},
+        style={"duration": 3, "button_shape": "pill", "button_spacing": "roomy"},
     )
     fields["from"] = "test"
     assert (await east("show_card", **fields))["ok"] and last(a, "cards") == fields

@@ -1,6 +1,6 @@
 # Migrating existing notifications
 
-For TvOverlay senders, open Herald's **Compatibility** settings. Add the sender's numeric IPv4/IPv6 address or CIDR, choose a category, and enable the separate listener (default port 5001). Limit this list to trusted senders. If the port is occupied, choose a different port and update the sender. The native API stays on its configured port and uses pairing. [TvOverlay REST field reference](https://github.com/gugutab/TvOverlay#rest-api)
+For TvOverlay senders, open **Integrations → TvOverlay** on the TV. Add the sender's numeric IPv4/IPv6 address or CIDR and enable the separate listener (default port 5001). Limit this list to trusted senders. Choose **More options** to change the default category or port. If the port is occupied, choose a different port and update the sender. The native API stays on its configured port and uses pairing. [TvOverlay REST field reference](https://github.com/gugutab/TvOverlay#rest-api)
 
 ### POST /notify
 

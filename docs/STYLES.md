@@ -1,6 +1,6 @@
 # Card styles and display policy
 
-Open **Herald → Looks** to preview each look. OK sends a real test card. Hold OK to assign the look to a category. **New look** copies a built-in so you can edit its appearance. Under **Categories**, choose a look, toggle Announce or tweak a style field. **Send test** posts a card using that category, including its speech policy. **Reset to default** removes the tweaks and restores the default look and announce setting.
+Open **Herald → Looks** to preview each look. Each thumbnail places the actual card over a sample TV scene. Press OK for the same scene at full size. OK or Back closes the preview, and it closes automatically after eight seconds. Hold OK to assign the look to a category. **More options → New look** copies a built-in so you can edit its appearance. Under **Categories**, choose a look, toggle Announce or tweak a style field. **Send test** posts a card using that category, including its speech policy. **More options → Reset to default** removes the tweaks and restores the default look and announce setting.
 
 ## How styles combine
 
@@ -10,9 +10,11 @@ Herald applies each layer in order. Later layers override only the keys they sup
 
 For example, post `{"category":"alarm","message":"Check now","look":"classic","style":{"icon":"bell"},"icon":"emoji:🔔"}`. Alarm's alert look supplies center placement, large size and large text. Classic keeps those three and supplies its black background, white text, card layout, small corner, bar and no border, glow or label. The top-level bell emoji wins over the vector bell in the request style.
 
+The background opacity controls how much of the current app shows through the card background. The live picture uses the source brightness, follows the card corners, and sits inside the border. Video cards receive pointer input inside their window so Android can show the picture at full opacity. Touches outside a corner video card pass to the app underneath. Cards without video remain click-through. The shadow and glow extend outside the frame. Fullscreen cards have square corners and shade the caption area for readability.
+
 ## Named looks
 
-These JSON objects are the complete built-in override maps. The table below them describes the underlying category defaults. A custom look can set any subset of `placement`, `size`, `text_size`, `background`, `opacity`, `layout`, `corner`, `border`, `border_color`, `shadow`, `glow`, `accent_style`, `title_color`, `text_color`, `title_weight`, `label` and `animation`. An empty map leaves the previous card layer intact. See the [Looks API](API.md#looks) to save or replace one.
+These JSON objects are the complete built-in override maps. The table below them describes the underlying category defaults. A custom look can set any subset of `placement`, `size`, `text_size`, `background`, `opacity`, `layout`, `corner`, `border`, `border_color`, `shadow`, `glow`, `accent_style`, `title_color`, `text_color`, `title_weight`, `label`, `animation` and the six `button_` fields in the table below. An empty map leaves the previous card layer intact. See the [Looks API](API.md#looks) to save or replace one.
 
 ```json
 {"classic":{"layout":"card","corner":"small","border":"none","border_color":"#FFFFFF","shadow":"none","glow":"none","accent_style":"bar","background":"#000000","opacity":90,"title_color":"#FFFFFF","text_color":"#FFFFFF","title_weight":"bold","label":"none"},
@@ -64,6 +66,10 @@ General, announcement, reminder and system start with glass. Doorbell and camera
 | accent_style | bar, badge, dot, underline, none | bar |
 | title_color, text_color | #RRGGBB for title and body respectively | #FFFFFF |
 | title_weight | bold, normal | bold |
+| button_shape | square, rounded, pill | rounded |
+| button_spacing | compact, normal, roomy | normal |
+| button_background, button_text_color | #RRGGBB fill and label for an unselected action | #303744, #FFFFFF |
+| button_focus_background, button_focus_text_color | #RRGGBB fill and label for the action selected with the remote | #FFFFFF, #111827 |
 | label | none, category (uppercase category name) | none |
 
 ### Layout, decorations and placement
@@ -85,6 +91,12 @@ Priority is a top-level card field (low, normal, high, critical). For each arriv
 A timed request while the screen is off is skipped. Screen-off expires active timed cards and moves until-cleared cards to waiting. Surplus waiting cards end as capped, lowest priority and oldest first. Screen-on readmits waiting cards. The sticky cap runs from acceptance across all states. Night uses the box's local hours. Dim multiplies opacity by 0.6, rounds to a multiple of five and steps size and text size down once.
 
 ### Buttons and playback
+
+On the TV, open **Looks** and edit a custom look, or open **Categories** and choose a category. Choose **Preview buttons** to try the current colors and move selection between two actions. Both sample actions close the preview.
+
+`button_spacing` controls the gap above the row, the space between actions, the padding inside each button and the gap before the remote hint. A card without buttons reserves no action space. The selected button also gets a light or dark outline against its selected fill. Use a contrasting label color for each fill.
+
+A single action can override any of the four palette colors through its own `style` object. Shape and spacing apply to the whole row. See the [Home Assistant example](HOME_ASSISTANT.md#actions).
 
 The most recently accepted eligible card with buttons and focus auto can take focus. With `display.focus_while_playing:false`, buttons draw at half opacity with “Pause to use buttons” during external sound and become available when it stops. Select with Left/Right then OK. Selection starts at the first button and stops at either end. BACK dismisses the focused card. A focused card handles only the four D-pad directions, D-pad center, Enter, numeric Enter and Back. Other keys pass to Android, including media and volume keys supported by the active route.
 

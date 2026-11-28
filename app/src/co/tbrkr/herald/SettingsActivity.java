@@ -3,7 +3,7 @@ package co.tbrkr.herald;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
-import android.graphics.Canvas;
+import android.widget.FrameLayout;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.StateListDrawable;
@@ -43,10 +43,6 @@ import java.util.function.IntConsumer;
 /** Local, D-pad-operated controls. The service owns all settings and pairing state. */
 public final class SettingsActivity extends Activity {
     private static final int TEXT = 0xffe8ecf2, MUTED = 0xff93a0b4, BLUE = 0xff3ba3e0;
-    private static final String[] SUBTITLES = {"Set up Herald with the remote", "Select a look to send a test card. Hold OK to use it for a category.", "Card settings by category",
-            "Card and chip display settings", "Output levels and audio tests", "Manage paired clients",
-            "Broker connection settings", "Topic subscriptions", "TvOverlay settings", "Live service and device status",
-            "Device information and diagnostics"};
     private static final String COLORS = "#4FC3F7 #FFB74D #81C784 #E57373 #BA68C8 #FFF176 #90A4AE #B0BEC5 #4DB6AC #F06292 #000000 #FFFFFF";
     private final Handler main = new Handler(android.os.Looper.getMainLooper());
     private final List<Button> tabs = new ArrayList<>();
@@ -60,18 +56,23 @@ public final class SettingsActivity extends Activity {
     private boolean receiving;
     private String receivingStatus;
     private TestCard testCard;
+    private LookPreview liveLook;
+    private View previewTile;
+    private final Runnable endPreview = this::dismissLookPreview;
     private HeraldService service;
     private int section;
     private boolean rendering;
     private String category, lastPairing;
-    private String editingLook;
+    private String editingLook, integration;
     private boolean pickingLook;
     private Auth.Client selectedClient;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
         receiving = HeraldService.receiving(this);
-        section = state == null ? 0 : state.getInt("section", 0);
+        section = state == null ? 0 : Math.max(0, SettingsModel.SECTIONS.indexOf(state.getString("sectionName")));
+        if (state != null && SettingsModel.INTEGRATIONS.contains(state.getString("integration")))
+            integration = state.getString("integration");
         LinearLayout frame = new LinearLayout(this);
         frame.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
                 new int[]{0xff11151c, 0xff0b0e13}));
@@ -100,27 +101,27 @@ public final class SettingsActivity extends Activity {
         LinearLayout brand = new LinearLayout(this);
         brand.setGravity(Gravity.CENTER_VERTICAL);
         sections.addView(brand);
-        TextView badge = heading(brand, "H", .03f, TEXT, true);
-        badge.setGravity(Gravity.CENTER);
-        badge.setBackground(shape(BLUE, false));
-        badge.setLayoutParams(new LinearLayout.LayoutParams(sh(.05f), sh(.05f)));
-        heading(brand, "  Herald", .034f, TEXT, true);
+        android.widget.ImageView mark = new android.widget.ImageView(this);
+        mark.setImageResource(R.drawable.herald_mark);
+        mark.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        brand.addView(mark, new LinearLayout.LayoutParams(sh(.075f), sh(.075f)));
+        heading(brand, " Herald", .038f, TEXT, true);
+        brand.setPadding(0, 0, 0, sh(.025f));
         for (int i = 0; i < SettingsModel.SECTIONS.size(); i++) {
             final int index = i;
             Button tab = button(sections, SettingsModel.SECTIONS.get(i));
+            StateListDrawable background = new StateListDrawable();
+            background.addState(new int[]{android.R.attr.state_focused}, shape(0xff254863, true));
+            background.addState(new int[]{android.R.attr.state_selected}, shape(0xff293b4b, false));
+            background.addState(new int[0], shape(android.graphics.Color.TRANSPARENT, false));
+            tab.setBackground(background);
+            tab.setFocusedByDefault(i == section);
             tabs.add(tab);
             tab.setOnFocusChangeListener((v, focus) -> {
                 scale(v, focus);
-                if (focus && !rendering && section != index) {
-                    section = index;
-                    category = null;
-                    editingLook = null;
-                    pickingLook = false;
-                    selectedClient = null;
-                    render(-1);
-                }
+                if (focus && !rendering && section != index) openSection(index, -1);
             });
-            tab.setOnClickListener(v -> { render(0); });
+            tab.setOnClickListener(v -> openSection(index, 0));
             tab.setOnKeyListener((v, key, event) -> {
                 if (key != KeyEvent.KEYCODE_DPAD_RIGHT) return false;
                 if (event.getAction() == KeyEvent.ACTION_DOWN) render(0);
@@ -137,7 +138,8 @@ public final class SettingsActivity extends Activity {
 
     @Override protected void onSaveInstanceState(Bundle state) {
         super.onSaveInstanceState(state);
-        state.putInt("section", section);
+        state.putString("sectionName", SettingsModel.SECTIONS.get(section));
+        state.putString("integration", integration);
     }
 
     @Override public void onStart() {
@@ -153,6 +155,7 @@ public final class SettingsActivity extends Activity {
 
     @Override public void onStop() {
         started = false;
+        dismissLookPreview();
         if (testCard != null) testCard.dismiss();
         if (pairingStatus != null) pairingStatus.setText("");
         secureCode(false);
@@ -186,6 +189,7 @@ public final class SettingsActivity extends Activity {
 
     @Override public void onBackPressed() { back(); }
     private void back() {
+        if (liveLook != null) { dismissLookPreview(); return; }
         if (testCard != null && testCard.dismiss()) return;
         if (pickingLook) {
             pickingLook = false;
@@ -203,6 +207,12 @@ public final class SettingsActivity extends Activity {
             render(0);
             View row = rows.findViewWithTag(previous);
             if (row != null) row.requestFocus();
+        } else if (integration != null) {
+            String previous = integration;
+            integration = null;
+            render(0);
+            View link = rows.findViewWithTag(previous);
+            if (link != null) link.requestFocus();
         } else if (rows.hasFocus()) {
             tabs.get(section).requestFocus();
         } else finish();
@@ -215,11 +225,12 @@ public final class SettingsActivity extends Activity {
         ScrollView scroll = new ScrollView(this);
         scroll.setId(id);
         scroll.setFocusable(false);
+        if (id == R.id.herald_rail) scroll.setBackgroundColor(0xff19232d);
         frame.addView(scroll, new LinearLayout.LayoutParams(0, -1, weight));
         LinearLayout column = new LinearLayout(this);
-        column.setPadding(sh(.034f), sh(.02f), sh(.034f), sh(.02f));
+        column.setPadding(sh(.034f), sh(.038f), sh(.034f), sh(.03f));
         column.setClipToPadding(false);
-        // Focused rows and look tiles grow by 4 %; let them draw into the column padding.
+        // Let focus outlines draw into the column padding.
         column.setClipChildren(false);
         column.setOrientation(LinearLayout.VERTICAL);
         scroll.addView(column);
@@ -233,22 +244,25 @@ public final class SettingsActivity extends Activity {
         return draw;
     }
     private void scale(View view, boolean focus) {
-        float size = focus ? 1.04f : 1f;
+        float size = focus ? 1.012f : 1f;
         view.animate().scaleX(size).scaleY(size).setDuration(150).start();
     }
-    private void styleRow(TextView view) {
+    private void styleText(TextView view) {
+        view.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
+        view.setTextColor(TEXT);
+        view.setTextSize(TypedValue.COMPLEX_UNIT_PX, sh(.023f));
+        view.setSingleLine(true);
+        view.setEllipsize(android.text.TextUtils.TruncateAt.END);
+    }
+
+    private void styleRow(View view) {
         StateListDrawable states = new StateListDrawable();
         states.addState(new int[]{android.R.attr.state_focused}, shape(0x293ba3e0, true));
         states.addState(new int[0], shape(0xff1b222c, false));
         view.setBackground(states);
         view.setStateListAnimator(null);
         view.setElevation(0);
-        view.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
-        view.setTextColor(TEXT);
-        view.setTextSize(TypedValue.COMPLEX_UNIT_PX, sh(.023f));
         view.setPadding(sh(.02f), 0, sh(.02f), 0);
-        view.setSingleLine(true);
-        view.setEllipsize(android.text.TextUtils.TruncateAt.END);
         view.setFocusable(true);
         view.setOnFocusChangeListener(this::scale);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, sh(.055f));
@@ -266,6 +280,7 @@ public final class SettingsActivity extends Activity {
     }
     private Button button(LinearLayout parent, String label) {
         Button b = new Button(this);
+        styleText(b);
         styleRow(b);
         b.setText(label);
         b.setAllCaps(false);
@@ -274,7 +289,14 @@ public final class SettingsActivity extends Activity {
     }
     private TextView line(String text) {
         TextView label = new TextView(this);
+        styleText(label);
         styleRow(label);
+        label.setTextColor(MUTED);
+        // Keep long read-only pages scrollable with the remote.
+        StateListDrawable background = new StateListDrawable();
+        background.addState(new int[]{android.R.attr.state_focused}, shape(0xff254863, true));
+        background.addState(new int[0], shape(android.graphics.Color.TRANSPARENT, false));
+        label.setBackground(background);
         label.setText(text);
         rows.addView(label);
         return label;
@@ -313,6 +335,44 @@ public final class SettingsActivity extends Activity {
         text.requestFocus();
     }
 
+    private void openSection(int index, int focus) {
+        if (index != section) {
+            section = index;
+            category = editingLook = integration = null;
+            selectedClient = null;
+            pickingLook = false;
+        }
+        render(focus);
+    }
+
+    private static final Object OPTIONS_TAG = new Object();
+
+    private String optionsKey() {
+        if (integration != null) return "integration." + integration;
+        String page = SettingsModel.SECTIONS.get(section);
+        return editingLook != null || category != null ? page + ".editor" : page;
+    }
+
+    private boolean expanded() {
+        return getSharedPreferences("settings_ui", MODE_PRIVATE).getBoolean(optionsKey(), false);
+    }
+
+    private boolean moreOptions() {
+        String key = optionsKey();
+        boolean open = expanded();
+        Button toggle = action(open ? "Fewer options  ▴" : "More options  ▾", () -> {
+            getSharedPreferences("settings_ui", MODE_PRIVATE).edit().putBoolean(key, !open).apply();
+            render(-1);
+            View replacement = rows.findViewWithTag(OPTIONS_TAG);
+            if (replacement != null) replacement.requestFocus();
+        });
+        toggle.setFocusableInTouchMode(true);
+        toggle.setTag(OPTIONS_TAG);
+        toggle.setTextColor(0xff9fd8f8);
+        toggle.setContentDescription(open ? "More options, expanded" : "More options, collapsed");
+        return open;
+    }
+
     private void render(int focus) {
         rendering = true;
         try { populate(focus); } finally { rendering = false; }
@@ -324,8 +384,12 @@ public final class SettingsActivity extends Activity {
         pairingStatus = null;
         statusViews.clear();
         String name = SettingsModel.SECTIONS.get(section);
-        heading(rows, name, .034f, TEXT, true);
-        heading(rows, SUBTITLES[section], .018f, MUTED, false);
+        for (int i = 0; i < tabs.size(); i++) {
+            tabs.get(i).setSelected(i == section);
+            tabs.get(i).setFocusedByDefault(i == section);
+        }
+        TextView title = heading(rows, integration == null ? name : integration, .04f, TEXT, true);
+        title.setPadding(0, 0, 0, sh(.013f));
         if (!Setup.available(name, receiving)) line("Start receiving to change this.");
         else if ("Setup".equals(name)) setup();
         else if ("About".equals(name)) diagnostics();
@@ -336,18 +400,28 @@ public final class SettingsActivity extends Activity {
                 else customLook();
                 break;
             case "Categories": categories(); break;
-            case "Display": group("display"); break;
+            case "Display":
+                groupHeading("Cards");
+                group("display", "max_visible", "night_start", "night_end");
+                groupHeading("Status chips");
+                group("display", "chip_look", "chip_placement");
+                if (moreOptions()) group("display", "pixel_shift", "sticky_cap", "focus_while_playing");
+                break;
             case "Sound & voice":
-                group("audio");
+                group("audio", "volume_tv", "volume_speaker", "chime");
+                if (!moreOptions()) break;
+                group("audio", "speaker_at_night");
                 voiceTest("TV", "tv");
                 voiceTest("box speaker", "speaker");
                 action("Chime test", () -> service.testChime((int)AnnounceSpec.audioSettings(service.settings()).get("volume_tv")));
                 break;
             case "Pairing & clients": pairing(); break;
-            case "MQTT": group("mqtt"); break;
-            case "ntfy": ntfy(); break;
-            case "Compatibility": compatibility(); break;
-            case "Status": statusStart = rows.getChildCount(); refreshStatus(); break;
+            case "Integrations": integrations(); break;
+            case "Status":
+                statusStart = rows.getChildCount();
+                refreshStatus();
+                moreOptions();
+                break;
         }
         if (pairingStatus == null) secureCode(false);
         if (focus >= 0) {
@@ -355,6 +429,29 @@ public final class SettingsActivity extends Activity {
                 if (rows.getChildAt(i).requestFocus()) break;
             }
         }
+    }
+
+    private void groupHeading(String title) {
+        TextView heading = heading(rows, title, .019f, MUTED, true);
+        heading.setPadding(0, sh(.013f), 0, sh(.003f));
+    }
+
+    private void integrations() {
+        if (integration == null) {
+            Map<String,Object> settings = service.settings().document();
+            for (String name : SettingsModel.INTEGRATIONS) {
+                Map<String,Object> config = "TvOverlay".equals(name) ? Compat.config(settings)
+                        : Settings.object(settings.get(name.toLowerCase(Locale.ROOT)), name);
+                LinearLayout link = valueRow(name, Boolean.TRUE.equals(config.get("enabled")) ? "On  ›" : "Off  ›",
+                        SettingsModel.help(name));
+                link.setOnClickListener(v -> { integration = name; render(0); });
+                link.setTag(name);
+            }
+        } else if ("MQTT".equals(integration)) {
+            group("mqtt", "enabled", "host", "port", "tls", "username", "password_set");
+            if (moreOptions()) group("mqtt", "base_topic", "discovery", "discovery_prefix", "commands");
+        } else if ("ntfy".equals(integration)) ntfy();
+        else compatibility();
     }
 
     private void voiceTest(String label, String output) {
@@ -374,42 +471,49 @@ public final class SettingsActivity extends Activity {
                 "look", look.id, "style", Json.fields("duration", 8));
     }
 
-    /** Draw an unattached card at its overlay measurements, with its normal decoration. */
-    private View preview(Look look) {
-        Settings settings = service.settings();
+    private LookPreview preview(Look look, boolean thumbnail) {
         Map<String,Object> body = lookCard(look);
+        body.put("title", "Front door");
+        body.put("message", "A package has arrived.");
         body.put("icon", "info");
-        CardSpec spec = new CardSpec(body, settings);
-        int sw = getResources().getDisplayMetrics().widthPixels, height = sh(1);
-        CardView card = new CardView(this, new CardBoard.Entry(spec, 0, 0, 0),
-                sw, height, "General", null, () -> {});
-        boolean full = "fullscreen".equals(card.placement);
-        boolean wrap = !full && "pill".equals(card.layout) && !"full".equals(spec.style.fields.get("size"));
-        card.measure(View.MeasureSpec.makeMeasureSpec(card.width, wrap ? View.MeasureSpec.AT_MOST : View.MeasureSpec.EXACTLY),
-                View.MeasureSpec.makeMeasureSpec(height, full ? View.MeasureSpec.EXACTLY : View.MeasureSpec.AT_MOST));
-        card.layout(0, 0, card.getMeasuredWidth(), card.getMeasuredHeight());
-        int[] edge = card.insets;
-        int width = card.getWidth() + edge[0] + edge[2], totalHeight = card.getHeight() + edge[1] + edge[3];
-        card.decoration.layout(0, 0, width, totalHeight);
-        return new View(this) {
-            @Override protected void onMeasure(int w, int h) {
-                int available = MeasureSpec.getSize(w);
-                setMeasuredDimension(available, Math.round(available * 9f / 16));
+        return new LookPreview(this, new CardSpec(body, service.settings()), thumbnail);
+    }
+
+    private void showLookPreview(Look look, View tile) {
+        dismissLookPreview();
+        previewTile = tile;
+        liveLook = preview(look, false);
+        FrameLayout content = findViewById(android.R.id.content);
+        content.addView(liveLook, new FrameLayout.LayoutParams(-1, -1));
+        liveLook.setContentDescription(look.name + " preview. Back or OK to close.");
+        liveLook.setFocusableInTouchMode(true);
+        liveLook.setOnClickListener(v -> dismissLookPreview());
+        liveLook.setOnKeyListener((v, key, event) -> {
+            if (key == KeyEvent.KEYCODE_DPAD_CENTER || key == KeyEvent.KEYCODE_ENTER ||
+                    key == KeyEvent.KEYCODE_NUMPAD_ENTER) {
+                if (event.getAction() == KeyEvent.ACTION_UP && !event.isCanceled()) dismissLookPreview();
+                return true;
             }
-            @Override protected void onDraw(Canvas canvas) {
-                float scale = .92f * Math.min((float)getWidth() / width, (float)getHeight() / totalHeight);
-                canvas.save();
-                canvas.translate((getWidth() - width * scale) / 2, (getHeight() - totalHeight * scale) / 2);
-                canvas.scale(scale, scale);
-                card.decoration.draw(canvas);
-                canvas.translate(edge[0], edge[1]);
-                card.draw(canvas);
-                canvas.restore();
-            }
-        };
+            return key == KeyEvent.KEYCODE_DPAD_LEFT || key == KeyEvent.KEYCODE_DPAD_RIGHT ||
+                    key == KeyEvent.KEYCODE_DPAD_UP || key == KeyEvent.KEYCODE_DPAD_DOWN;
+        });
+        liveLook.requestFocus();
+        main.postDelayed(endPreview, 8000);
+    }
+
+    private void dismissLookPreview() {
+        main.removeCallbacks(endPreview);
+        if (liveLook == null) return;
+        // Removing the focused overlay can send focus to the first sidebar item.
+        // Restore the source tile before Android searches for another destination.
+        if (previewTile.isAttachedToWindow()) previewTile.requestFocusFromTouch();
+        ((FrameLayout)liveLook.getParent()).removeView(liveLook);
+        liveLook = null;
+        previewTile = null;
     }
 
     private void lookGrid() {
+        if (!pickingLook) heading(rows, "OK to preview · Hold OK to assign", .019f, MUTED, false);
         Settings settings = service.settings();
         int gap = Math.round(.012f * getResources().getDisplayMetrics().widthPixels);
         synchronized (settings) {
@@ -434,10 +538,12 @@ public final class SettingsActivity extends Activity {
                 states.addState(new int[]{android.R.attr.state_focused}, shape(0x293ba3e0, true));
                 states.addState(new int[0], shape(0xff1b222c, false));
                 tile.setBackground(states);
+                int inset = sh(.006f);
+                tile.setPadding(inset, inset, inset, inset);
                 tile.setOnFocusChangeListener(this::scale);
                 String categories = String.join(", ", entry.getValue());
                 tile.setContentDescription(label(look.name) + (categories.isEmpty() ? "" : " · " + categories));
-                tile.addView(preview(look), new LinearLayout.LayoutParams(-1, -2));
+                tile.addView(preview(look, true), new LinearLayout.LayoutParams(-1, -2));
                 for (String caption : Arrays.asList(label(look.name), categories)) {
                     boolean title = tile.getChildCount() == 1;
                     TextView text = heading(tile, caption, title ? .023f : .017f, title ? TEXT : MUTED, title);
@@ -450,7 +556,7 @@ public final class SettingsActivity extends Activity {
                         settings.putCategory(category, Json.fields("look", look.id));
                         pickingLook = false;
                         render(0);
-                    } else test("card", lookCard(look));
+                    } else showLookPreview(look, tile);
                 }));
                 if (!pickingLook) {
                     tile.setOnLongClickListener(v -> { assignLook(look); return true; });
@@ -478,7 +584,7 @@ public final class SettingsActivity extends Activity {
                 addGridCell(strip, new View(this), column, gap);
                 column = (column + 1) % 3;
             }
-            if (pickingLook) return;
+            if (pickingLook || !moreOptions()) return;
             action("New look", this::newLook);
             for (Look look : tiles.keySet()) if (Look.builtin(look.id) == null)
                 action("Edit " + look.name, () -> { editingLook = look.id; render(0); });
@@ -523,30 +629,39 @@ public final class SettingsActivity extends Activity {
                 })).show();
     }
 
+    private void previewButtons(Map<String, Object> card) {
+        card.put("buttons", Arrays.asList(Json.fields("id", "okay", "label", "OK", "action", "dismiss"),
+                Json.fields("id", "close", "label", "Close", "action", "dismiss")));
+        test("card", card);
+    }
+
     private void customLook() {
         Settings settings = service.settings();
         String id = editingLook;
         Look look = settings.look(id);
         if (look == null) { editingLook = null; render(0); return; }
         heading(rows, look.name, .028f, TEXT, true);
-        for (String key : Arrays.asList("background", "border_color", "opacity", "corner", "border", "shadow",
-                "glow", "accent_style", "title_weight")) {
-            Object value = look.style.getOrDefault(key, Look.BASE.get(key));
-            tweak(key, value, next -> {
-                synchronized (settings) {
-                    Look current = settings.look(id);
-                    if (current == null) throw new Api.Failure(404, "unknown look");
-                    Map<String,Object> style = new LinkedHashMap<>(current.style);
-                    style.put(key, next);
-                    settings.putLook(id, Json.fields("name", current.name, "style", style));
-                }
-            }, choices(key, value));
-        }
+        action("Preview buttons", () -> previewButtons(lookCard(look)));
+        lookFields(settings, look, "background", "opacity", "corner", "button_shape", "button_spacing");
+        if (!moreOptions()) return;
+        lookFields(settings, look, "border_color", "border", "shadow", "glow", "accent_style", "title_weight",
+                "button_background", "button_text_color", "button_focus_background", "button_focus_text_color");
         action("Delete", () -> { settings.deleteLook(id); editingLook = null; render(0); });
     }
 
-    private void tweak(String key, Object value, Consumer<Object> put, List<Object> options) {
-        field(label(key.replace('_', ' ')), value, put, options);
+    private void lookFields(Settings settings, Look look, String... fields) {
+        for (String key : fields) {
+            Object value = look.style.getOrDefault(key, Look.BASE.get(key));
+            field(key, value, next -> {
+                synchronized (settings) {
+                    Look current = settings.look(look.id);
+                    if (current == null) throw new Api.Failure(404, "unknown look");
+                    Map<String,Object> style = new LinkedHashMap<>(current.style);
+                    style.put(key, next);
+                    settings.putLook(look.id, Json.fields("name", current.name, "style", style));
+                }
+            }, choices(key, value));
+        }
     }
 
     private void categories() {
@@ -554,7 +669,9 @@ public final class SettingsActivity extends Activity {
         for (Map<String,Object> item : settings.categories()) {
             String id = (String)item.get("id");
             if (category == null) {
-                action(item.get("name") + " (" + id + ")", () -> { category = id; render(0); }).setTag(id);
+                String name = item.get("name").toString();
+                String label = name.equalsIgnoreCase(id) ? name : name + " (" + id + ")";
+                action(label, () -> { category = id; render(0); }).setTag(id);
             } else if (category.equals(id)) {
                 if (pickingLook) { lookGrid(); return; }
                 heading(rows, (String)item.get("name"), .028f, TEXT, true);
@@ -563,13 +680,14 @@ public final class SettingsActivity extends Activity {
                 field("Announce", item.get("announce"), value -> settings.putCategory(id, Json.fields("announce", value)),
                         Arrays.asList(false, true));
                 Map<String,Object> effective = Settings.object(item.get("effective"), "effective");
-                for (String key : Arrays.asList("accent", "corner", "border", "opacity", "placement", "size", "duration")) {
-                    List<Object> options = key.equals("border") ? Arrays.asList("none", "thin") : choices(key, effective.get(key));
-                    tweak(key, effective.get(key), value -> settings.putCategory(id,
-                            Json.fields("style", Json.fields(key, value))), options);
-                }
+                action("Preview buttons", () -> previewButtons(Json.fields("title", item.get("name") + " test",
+                        "category", id, "style", Json.fields("duration", 8))));
                 action("Send test", () -> test("card", Json.fields("category", id, "title", item.get("name") + " test",
                         "message", "This is a test card.")));
+                categoryFields(settings, id, effective, "placement", "size", "duration", "button_shape", "button_spacing");
+                if (!moreOptions()) return;
+                categoryFields(settings, id, effective, "accent", "corner", "border", "opacity", "button_background",
+                        "button_text_color", "button_focus_background", "button_focus_text_color");
                 action("Reset to default", () -> {
                     synchronized (settings) {
                         Map<String,Object> removals = Json.fields();
@@ -587,6 +705,7 @@ public final class SettingsActivity extends Activity {
             }
         }
         if (category != null) { category = null; render(0); return; }
+        if (!moreOptions()) return;
         action("Add category", () -> edit("New category ID", "", false, id -> {
             synchronized (settings) {
                 if (settings.categoryId(id).equals(id)) { feedback("Category already exists"); return; }
@@ -596,18 +715,25 @@ public final class SettingsActivity extends Activity {
             render(0);
         }));
     }
-    private void group(String group) {
+    private void categoryFields(Settings settings, String id, Map<String,Object> effective, String... keys) {
+        for (String key : keys) {
+            Object value = effective.get(key);
+            List<Object> options = key.equals("border") ? Arrays.asList("none", "thin") : choices(key, value);
+            field(key, value, next -> settings.putCategory(id, Json.fields("style", Json.fields(key, next))), options);
+        }
+    }
+
+    private void group(String group, String... keys) {
         Map<String,Object> values = Settings.object(service.settings().document().get(group), group);
-        for (Map.Entry<String,Object> item : values.entrySet()) {
-            String key = item.getKey();
+        for (String key : keys) {
             if (key.equals("password_set")) {
-                String label = (boolean)item.getValue() ? "Password (set)" : "Password (unset)";
+                String label = (boolean)values.get(key) ? "Password (set)" : "Password (unset)";
                 int row = rows.getChildCount();
                 action(label, () -> edit("MQTT password", "", true, value -> {
                     service.changeSettings(Json.fields("mqtt", Json.fields("password", value)));
                     render(row);
                 }));
-            } else field(key, item.getValue(), value -> service.changeSettings(Json.fields(group, Json.fields(key, value))));
+            } else field(key, values.get(key), value -> service.changeSettings(Json.fields(group, Json.fields(key, value))));
         }
     }
 
@@ -630,7 +756,7 @@ public final class SettingsActivity extends Activity {
             render(0);
         }));
         if (hasToken) action("Clear token", () -> { ntfySetting("token", null); render(0); });
-        field("Catch-up (seconds)", group.get("catch_up"), value -> ntfySetting("catch_up", value));
+
         ntfyStatus = line("Status    " + service.ntfyStatus());
         List<Object> categories = new ArrayList<>(), looks = new ArrayList<>();
         looks.add("Use category look");
@@ -651,6 +777,7 @@ public final class SettingsActivity extends Activity {
             editTopic(null, "topic", name);
             render(0);
         }));
+        if (moreOptions()) field("Catch-up (seconds)", group.get("catch_up"), value -> ntfySetting("catch_up", value));
     }
 
     private void editTopic(String name, String key, Object value) {
@@ -677,7 +804,6 @@ public final class SettingsActivity extends Activity {
         Settings settings = service.settings();
         Map<String,Object> cfg = Compat.config(settings.document());
         field("enabled", cfg.get("enabled"), value -> saveCompat("enabled", value));
-        field("port", cfg.get("port"), value -> saveCompat("port", value));
         List<String> senders = new ArrayList<>();
         for (Object address : (List<?>)cfg.get("allowed")) senders.add((String)address);
         field("Allowed senders (comma-separated)", String.join(", ", senders), value -> {
@@ -688,6 +814,8 @@ public final class SettingsActivity extends Activity {
             }
             saveCompat("allowed", allowed);
         });
+        if (!moreOptions()) return;
+        field("port", cfg.get("port"), value -> saveCompat("port", value));
         List<Object> ids = new ArrayList<>();
         for (Map<String,Object> item : settings.categories()) ids.add(item.get("id"));
         field("category", cfg.get("category"), value -> saveCompat("category", value), ids);
@@ -704,15 +832,18 @@ public final class SettingsActivity extends Activity {
             action("Remove", () -> { auth.remove(selectedClient); selectedClient = null; render(0); });
             return;
         }
-        group("pairing");
+        if (!service.settings().pairingAllowed()) group("pairing", "allowed");
         action("Pair a new client", () -> { auth.startTv(); updatePairing(); });
         pairingStatus = line("");
         pairingStatus.setSaveEnabled(false);
         pairingFingerprint = line("");
+        pairingFingerprint.setSingleLine(false);
+        pairingFingerprint.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
         lastPairing = auth.pairedName();
         updatePairing();
         for (Auth.Client c : auth.localClients())
-            action(c.name, () -> { selectedClient = c; render(3); }).setTag(c.name);
+            action(c.name, () -> { selectedClient = c; render(0); }).setTag(c.name);
+        if (service.settings().pairingAllowed() && moreOptions()) group("pairing", "allowed");
     }
     private void updatePairing() {
         Auth auth = service.auth();
@@ -722,7 +853,9 @@ public final class SettingsActivity extends Activity {
         String fingerprint = service.certSha256();
         String identity = fingerprint.isEmpty() ? "" : "Fingerprint " + TlsIdentity.grouped(fingerprint);
         String state = code != null ? "Pairing code  " + code : paired == null ? "" : "Paired with " + paired;
-        pairingStatus.setText(state);
+        pairingStatus.setVisibility(state.isEmpty() ? View.GONE : View.VISIBLE);
+        pairingFingerprint.setVisibility(identity.isEmpty() ? View.GONE : View.VISIBLE);
+        if (!state.contentEquals(pairingStatus.getText())) pairingStatus.setText(state);
         if (!identity.contentEquals(pairingFingerprint.getText())) pairingFingerprint.setText(identity);
         if (code == null) secureCode(false);
     }
@@ -748,13 +881,14 @@ public final class SettingsActivity extends Activity {
     private void refreshStatus() {
         List<String> clients = new ArrayList<>();
         for (Auth.Client c : service.auth().localClients()) clients.add(c.name);
-        List<String> values = SettingsModel.statusRows(service.settingsStatus(), clients, addresses());
+        List<String> values = SettingsModel.statusRows(service.settingsStatus(), clients, addresses(), expanded());
         // Only the address group varies in length. Keep the other row views and their focus.
         if (statusViews.isEmpty()) {
             for (String value : values) statusViews.add(line(value));
         } else {
             while (statusViews.size() < values.size()) {
                 TextView address = new TextView(this);
+                styleText(address);
                 styleRow(address);
                 statusViews.add(1, address);
                 rows.addView(address, statusStart + 1);
@@ -781,14 +915,13 @@ public final class SettingsActivity extends Activity {
         Intent overlayIntent = target == Setup.Target.PACKAGE_OVERLAY ? specific
                 : target == Setup.Target.OVERLAY ? plain : target == Setup.Target.APP_DETAILS ? details : null;
         permissionRow("Show cards over other apps", overlay, overlayIntent, Setup.OVERLAY_ADB);
-        permissionRow("Battery (optional)", exempt,
-                Setup.batteryTarget(resolves(battery)) == Setup.Target.BATTERY ? battery : null, Setup.BATTERY_ADB);
         action("Test card    " + Setup.testCardStatus(overlay), () -> {
-            if (!android.provider.Settings.canDrawOverlays(this)) { feedback("Needs row 1"); return; }
+            if (!android.provider.Settings.canDrawOverlays(this)) { feedback(Setup.testCardStatus(false)); return; }
             if (testCard != null) testCard.dismiss();
             testCard = TestCard.show(this);
         });
-        line("Receiving    " + receivingStatus);
+        if (receivingStatus != null && !"On".equals(receivingStatus) && !"Off".equals(receivingStatus))
+            line("Receiving    " + receivingStatus);
         if (!receiving || (service == null && !HeraldService.startPending)) {
             action("Start receiving", () -> {
                 HeraldService.requestStart(this, HeraldService.receiving(this));
@@ -803,6 +936,8 @@ public final class SettingsActivity extends Activity {
             refreshSetup();
         });
         privacyRow();
+        if (moreOptions()) permissionRow("Battery (optional)", exempt,
+                Setup.batteryTarget(resolves(battery)) == Setup.Target.BATTERY ? battery : null, Setup.BATTERY_ADB);
     }
 
     private void refreshSetup() {
@@ -836,7 +971,9 @@ public final class SettingsActivity extends Activity {
         line("Herald " + HeraldService.VERSION);
         privacyRow();
         if (!receiving || service == null) return;
-        group("device");
+        group("device", "name");
+        if (!moreOptions()) return;
+        group("device", "port");
         line("Device ID  " + service.deviceId());
         List<String> addresses = addresses();
         if (addresses.isEmpty()) line("No active network");
@@ -854,16 +991,44 @@ public final class SettingsActivity extends Activity {
         action("Refresh diagnostics", () -> render(rows.getChildCount()-1));
     }
 
+    private LinearLayout valueRow(String title, String display, String help) {
+        LinearLayout row = new LinearLayout(this) {
+            @Override public CharSequence getAccessibilityClassName() { return Button.class.getName(); }
+        };
+        styleRow(row);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout labels = new LinearLayout(this);
+        labels.setOrientation(LinearLayout.VERTICAL);
+        labels.setPadding(0, sh(.007f), sh(.018f), sh(.007f));
+        row.addView(labels, new LinearLayout.LayoutParams(0, -2, 1));
+        TextView name = heading(labels, title, .023f, TEXT, false);
+        styleText(name);
+        if (help != null) heading(labels, help, .018f, MUTED, false);
+        labels.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
+        row.getLayoutParams().height = LinearLayout.LayoutParams.WRAP_CONTENT;
+        row.setMinimumHeight(sh(.055f));
+        TextView current = heading(row, display, .023f, TEXT, false);
+        styleText(current);
+        current.setTextColor(0xffb5d8eb);
+        current.setMaxWidth(Math.round(.38f * getResources().getDisplayMetrics().widthPixels));
+        row.setContentDescription(title + ", " + display + (help == null ? "" : ". " + help));
+        row.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);
+        name.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        current.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        rows.addView(row);
+        return row;
+    }
+
     private void field(String key, Object value, Consumer<Object> put) {
         field(key, value, put, choices(key, value));
     }
 
     private void field(String key, Object value, Consumer<Object> put, List<Object> choices) {
-        String title = key.replace('_', ' ');
-        String display = key.equalsIgnoreCase("duration") && value.equals(0) ? "until cleared" : String.valueOf(value);
+        String title = SettingsModel.fieldLabel(key);
+        String display = SettingsModel.fieldValue(key, value);
         int index = rows.getChildCount();
         Consumer<Object> save = next -> { put.accept(next); render(index); };
-        Button row = button(rows, title + "    " + display);
+        LinearLayout row = valueRow(title, display, SettingsModel.help(key));
         IntConsumer step = dir -> {
             if (choices == null) return;
             int pos = choices.indexOf(value);
@@ -910,6 +1075,10 @@ public final class SettingsActivity extends Activity {
             case "shadow": words = "none soft strong"; break;
             case "glow": words = "none accent border"; break;
             case "accent_style": words = "bar badge dot underline none"; break;
+            case "button_shape": words = "square rounded pill"; break;
+            case "button_spacing": words = "compact normal roomy"; break;
+            case "button_background": case "button_text_color": case "button_focus_background": case "button_focus_text_color":
+                words = COLORS + " #303744 #111827"; break;
             case "title_weight": words = "bold normal"; break;
             case "accent": case "background": case "border_color": words = COLORS; break;
             case "icon": words = "none info bell door camera alarm warning home media megaphone person package tv timer check"; break;

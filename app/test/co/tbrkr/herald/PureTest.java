@@ -61,7 +61,7 @@ public final class PureTest {
         eq(Setup.Target.BATTERY, Setup.batteryTarget(true), "battery settings");
         eq(Setup.Target.ADB, Setup.batteryTarget(false), "battery fallback");
         pass("setup: battery row falls back to the ADB text when the settings screen does not resolve");
-        eq("Needs row 1", Setup.testCardStatus(false), "missing overlay");
+        eq("Allow overlay access first", Setup.testCardStatus(false), "missing overlay");
         eq("Ready", Setup.testCardStatus(true), "overlay granted");
         pass("setup: test card row needs the overlay permission");
         for (String section : SettingsModel.SECTIONS) {
@@ -409,15 +409,21 @@ public final class PureTest {
         pairingLayout(1280, 720, new int[]{423,234,435,253}, 374, 32, 43,
                 new int[]{526,564,602,648,686,724});
         pass("pairing window: six digits in two groups, an m:ss countdown and the pixel layout at 1920x1080 and 1280x720");
-        eq(Arrays.asList("Setup", "Looks", "Categories", "Display", "Sound & voice", "Pairing & clients",
-                "MQTT", "ntfy", "Compatibility", "Status", "About"), SettingsModel.SECTIONS, "sections");
+        eq(Arrays.asList("Setup", "Pairing & clients", "Looks", "Categories", "Display", "Sound & voice",
+                "Integrations", "Status", "About"), SettingsModel.SECTIONS, "sections");
         eq(Arrays.asList("Version  0.2", "Address  host:7979", "Address  [::1]:7979",
                 "API  TLS unavailable", "Paired clients  2 · One, Two", "Last card  —", "Last audio  played chime",
                 "Sound playing  false", "Screen on  true", "MQTT  off", "ntfy  —", "Compatibility  listening",
                 "Overlay permission  true", "Battery exemption  —", "Receiving  On"),
                 SettingsModel.statusRows(Json.fields("version", "0.2", "api_status", "TLS unavailable", "last_audio", "played chime",
                         "sound_playing", false, "screen_on", true, "mqtt", "off", "compat", "listening",
-                        "overlay_allowed", true), Arrays.asList("One", "Two"), Arrays.asList("host:7979", "[::1]:7979")), "status");
+                        "overlay_allowed", true), Arrays.asList("One", "Two"), Arrays.asList("host:7979", "[::1]:7979"), true), "status");
+        eq(Arrays.asList("MQTT", "ntfy", "TvOverlay"), SettingsModel.INTEGRATIONS, "integration destinations");
+        eq("Off", SettingsModel.fieldValue("enabled", false), "boolean");
+        eq("3 s", SettingsModel.fieldValue("duration", 3), "duration unit");
+        eq("Top left", SettingsModel.fieldValue("chip_placement", "top_left"), "placement");
+        eq("my_Look", SettingsModel.fieldValue("chip_look", "my_Look"), "literal look id");
+        eq(6, SettingsModel.statusRows(Json.fields(), List.of(), List.of(), false).size(), "compact status");
         pass("settings app: the sections and the Status rows, with — for unknown values");
         Settings tileSettings = new Fake().settings;
         tileSettings.putLook("kids", Json.fields("name", "Kids", "style", Json.fields()));
@@ -1004,6 +1010,9 @@ public final class PureTest {
                 {"border","none thin medium thick"}, {"border_color","#aBcDeF"}, {"shadow","none soft strong"},
                 {"glow","none accent border"}, {"accent_style","bar badge dot underline none"},
                 {"title_color","#123456"}, {"text_color","#0123AB"}, {"title_weight","bold normal"},
+                {"button_shape","square rounded pill"}, {"button_spacing","compact normal roomy"},
+                {"button_background","#654321"}, {"button_text_color","#13579A"},
+                {"button_focus_background","#ABCDEF"}, {"button_focus_text_color","#010203"},
                 {"label","none category"}, {"size","full"}};
         for (String[] row : values) {
             for (String value : row[1].split(" ")) eq(value, s.resolve("general", Json.fields(row[0], value)).fields.get(row[0]), row[0]);
@@ -1111,7 +1120,7 @@ public final class PureTest {
             eq(mix[i], row.get("look"), "Mix");
             eq(false, row.get("announce"), "silent default");
             eq(Json.fields(), row.get("style"), "no overrides");
-            eq(28, Settings.object(row.get("effective"), "effective").size(), "full style");
+            eq(34, Settings.object(row.get("effective"), "effective").size(), "full style");
         }
         f.settings.putCategory("extra", Json.fields());
         check(!f.settings.categoryAnnounce("extra"), "custom defaults silent");
@@ -2687,6 +2696,9 @@ public final class PureTest {
             eq(ids[i], row.get("id"), "category id");
             eq(Character.toUpperCase(ids[i].charAt(0)) + ids[i].substring(1), row.get("name"), "name");
             eq(true, row.get("builtin"), "built-in flag");
+            expected.get(i).putAll(Json.fields("button_shape", "rounded", "button_spacing", "normal",
+                    "button_background", "#303744", "button_text_color", "#FFFFFF",
+                    "button_focus_background", "#FFFFFF", "button_focus_text_color", "#111827"));
             eq(expected.get(i), row.get("effective"), "resolved " + ids[i]);
             eq(Json.fields(), row.get("style"), "sparse " + ids[i]);
         }
@@ -2906,6 +2918,24 @@ public final class PureTest {
                 "style",Json.fields("icon","home"),"buttons",List.of(b)),f.settings);
         eq("bell", spec.style.fields.get("icon"),"top-level icon wins");
         eq("event",spec.buttons.get(0).get("action"),"default action");
+        Map<String,Object> colors = Json.fields("background", "#abC123", "text_color", "#012345",
+                "focus_background", "#fedcba", "focus_text_color", "#102030");
+        Map<String,Object> action = Json.fields("id", "action", "label", "Go", "style", colors);
+        f.settings.putLook("actions", at("style.button_shape", "pill"));
+        f.settings.putCategory("general", Json.fields("look", "actions", "style", Json.fields("button_spacing", "roomy")));
+        CardSpec styled = new CardSpec(Json.fields("title", "Test", "buttons", List.of(action),
+                "style", Json.fields("button_background", "#112233")), f.settings);
+        eq(colors, styled.buttons.get(0).get("style"), "action palette");
+        eq("pill", styled.style.fields.get("button_shape"), "custom look shape");
+        eq("roomy", styled.style.fields.get("button_spacing"), "category spacing");
+        eq("#112233", styled.style.fields.get("button_background"), "request fill");
+        Settings restored = new Settings("TV", f.settingsJson, doc2 -> {}, f.events);
+        eq("pill", restored.resolve("general", null).fields.get("button_shape"), "saved look after restart");
+        for (Object invalid : List.of("red", Json.fields("background", "red"), Json.fields("icon", "#010203"),
+                Json.fields("focus_background", null))) {
+            action.put("style", invalid);
+            error(f.route("POST","cards",Json.fields("title","Test","buttons",List.of(action))),400,"bad buttons");
+        }
         check(!spec.video.containsKey("muted") && spec.video.get("timeout").equals(12),"video defaults");
         check(spec.id.matches("[a-f0-9]{16}"),"generated id");
     }

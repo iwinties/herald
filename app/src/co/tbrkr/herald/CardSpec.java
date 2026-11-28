@@ -81,7 +81,20 @@ final class CardSpec {
             if (!key(id) || !ids.add(id) || !(label instanceof String) || ((String) label).isEmpty()
                     || ((String) label).length() > 24 || !("event".equals(action) || "expand".equals(action)
                     || "dismiss".equals(action))) throw bad("buttons");
-            result.add(Json.fields("id", id, "label", label, "action", action));
+            Map<String, Object> button = Json.fields("id", id, "label", label, "action", action);
+            if (b.containsKey("style")) {
+                Map<String, Object> colors = object(b.get("style"), "buttons");
+                for (Map.Entry<String, Object> entry : colors.entrySet()) {
+                    switch (entry.getKey()) {
+                        case "background": case "text_color": case "focus_background": case "focus_text_color":
+                            if (!Style.validColor(entry.getValue())) throw bad("buttons");
+                            break;
+                        default: throw bad("buttons");
+                    }
+                }
+                button.put("style", new java.util.LinkedHashMap<>(colors));
+            }
+            result.add(button);
         }
         return result;
     }

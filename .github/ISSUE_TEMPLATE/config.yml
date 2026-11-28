@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Share your first-install result
+    url: https://github.com/iwinties/herald/issues/1
+    about: Tell us which TV you used and where setup worked or got stuck.

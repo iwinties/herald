@@ -1,0 +1,20 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="320dp" android:height="180dp"
+    android:viewportWidth="320" android:viewportHeight="180">
+  <path android:fillColor="#1E2A38" android:pathData="M0,0H320V180H0Z"/>
+  <!-- HERALD, drawn on a 44-unit cap height with 8-unit strokes. -->
+  <group android:translateX="109" android:translateY="68">
+    <path android:fillColor="#FFFFFF"
+        android:pathData="M0,0h8v18h12V0h8v44h-8V26H8v18H0Z"/>
+    <path android:fillColor="#FFFFFF"
+        android:pathData="M34,0h24v8H42v10h14v8H42v10h16v8H34Z"/>
+    <path android:fillColor="#FFFFFF" android:fillType="evenOdd"
+        android:pathData="M64,0h14a13,13 0,0 1,5 25l11,19h-9L74,26h-2v18h-8Z M72,8v10h6a5,5 0,0 0,0 -10Z"/>
+    <path android:fillColor="#FFFFFF" android:fillType="evenOdd"
+        android:pathData="M96,44l13,-44h8l13,44h-8l-3,-10h-12l-3,10Z M109,26h8l-4,-14Z"/>
+    <path android:fillColor="#FFFFFF"
+        android:pathData="M135,0h8v36h16v8h-24Z"/>
+    <path android:fillColor="#FFFFFF" android:fillType="evenOdd"
+        android:pathData="M164,0h10a18,18 0,0 1,18 18v8a18,18 0,0 1,-18 18h-10Z M172,8v28h2a10,10 0,0 0,10 -10v-8a10,10 0,0 0,-10 -10Z"/>
+  </group>
+</vector>

@@ -86,11 +86,11 @@
   "issues": {
     "new_address": {
       "title": "Herald {name} appeared at {host}:{port}",
-      "description": "Confirm the new address to reconnect.",
       "fix_flow": {
         "step": {
           "init": {
-            "title": "Use the new address?"
+            "title": "Use the new address?",
+            "description": "Confirm the new address to reconnect."
           }
         },
         "error": {

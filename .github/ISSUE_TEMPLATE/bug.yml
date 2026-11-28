@@ -1,0 +1,18 @@
+name: Report a bug
+description: Tell us what happened on your TV or in your Home Assistant setup.
+labels: [bug]
+body:
+  - type: textarea
+    id: setup
+    attributes:
+      label: What setup did you use?
+      description: Include your TV or box model, Herald version, and how you sent the notification. If you used Home Assistant, include its version.
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: What did you try, what did you expect, and what happened?
+      description: Include steps someone else can try. Leave out pairing codes, tokens, private media links, and household footage.
+    validations:
+      required: true

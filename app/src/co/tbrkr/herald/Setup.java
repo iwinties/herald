@@ -26,7 +26,7 @@ final class Setup {
 
     static Target batteryTarget(boolean resolves) { return resolves ? Target.BATTERY : Target.ADB; }
     static String grantStatus(boolean granted) { return granted ? "Allowed" : "Missing"; }
-    static String testCardStatus(boolean overlay) { return overlay ? "Ready" : "Needs row 1"; }
+    static String testCardStatus(boolean overlay) { return overlay ? "Ready" : "Allow overlay access first"; }
 
     static boolean resolveReceiving(Boolean stored, boolean hasDeviceId, boolean hasAuth, boolean hasSettings) {
         return stored != null ? stored : hasDeviceId || hasAuth || hasSettings;

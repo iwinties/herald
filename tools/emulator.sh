@@ -469,7 +469,7 @@ def navigation():
     move_down_to("Categories")
     key("DPAD_RIGHT")
     first = focused()
-    require(re.search(r" \([a-z0-9_]+\)$", first), "category list focus missing")
+    require(first == "General", "first category did not receive focus")
     key("DPAD_CENTER")
     require(focused().startswith("Look "), "category editor rows missing")
     key("BACK")

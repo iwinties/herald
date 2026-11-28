@@ -1,8 +1,8 @@
 # Discovery and MQTT
 
-Herald advertises its active HTTP port via DNS-SD service type `_herald._tcp` (HA: `_herald._tcp.local.`). TXT records contain the stable device UUID in `id`, `api=1` and the app `version`. Use the UUID for identity. Android can rename the instance to resolve a conflict. Changing the device name or port updates registration.
+Herald advertises its active HTTP port via DNS-SD service type `_herald._tcp` (HA: `_herald._tcp.local.`). TXT records contain the stable device UUID in `id`, `api=2` and the app `version`. Use the UUID for identity. Android can rename the instance to resolve a conflict. Changing the device name or port updates registration.
 
-Enable MQTT in the TV settings. Enter the broker host, port (default 1883), TLS preference, and credentials if required. TLS uses the platform trust store and hostname verification. The client uses a clean session, 30 s keepalive, automatic reconnect and client ID `herald-<first eight characters of id>`. On connect it renews subscriptions and publishes current availability and state. Historical events are skipped at reconnect.
+Open **Integrations → MQTT** on the TV. **More options** contains the base topic, discovery settings and command switch. Enable MQTT to connect. Enter the broker host, port (default 1883), TLS preference, and credentials if required. TLS uses the platform trust store and hostname verification. The client uses a clean session, 30 s keepalive, automatic reconnect and client ID `herald-<first eight characters of id>`. On connect it renews subscriptions and publishes current availability and state. Historical events are skipped at reconnect.
 
 ### Box publications
 

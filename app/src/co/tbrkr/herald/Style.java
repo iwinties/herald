@@ -6,6 +6,10 @@ import java.util.Map;
 
 /** An effective style. Every instance has all fields, in API document order. */
 final class Style {
+    static final Map<String, Object> BUTTON_DEFAULTS = Collections.unmodifiableMap(Json.fields(
+            "button_shape", "rounded", "button_spacing", "normal",
+            "button_background", "#303744", "button_text_color", "#FFFFFF",
+            "button_focus_background", "#FFFFFF", "button_focus_text_color", "#111827"));
     final Map<String, Object> fields;
 
     private Style(Map<String, Object> fields) {
@@ -13,13 +17,19 @@ final class Style {
     }
 
     static Style defaults(String icon, String accent, int duration, String stacking, String size, String night) {
-        return new Style(Json.fields("placement", "top_right", "size", size, "text_size", "medium",
+        Map<String, Object> values = Json.fields("placement", "top_right", "size", size, "text_size", "medium",
                 "accent", accent, "background", "#000000", "opacity", 90, "icon", icon, "duration", duration,
                 "stacking", stacking, "sound", "none", "sound_volume", 60, "video_sound", "off",
                 "show_here", true, "over_playback", "show", "night", night, "focus", "auto", "animation", "slide",
                 "layout", "card", "corner", "small", "border", "none", "border_color", "#FFFFFF",
                 "shadow", "none", "glow", "none", "accent_style", "bar", "title_color", "#FFFFFF",
-                "text_color", "#FFFFFF", "title_weight", "bold", "label", "none"));
+                "text_color", "#FFFFFF", "title_weight", "bold", "label", "none");
+        values.putAll(BUTTON_DEFAULTS);
+        return new Style(values);
+    }
+
+    static boolean validColor(Object value) {
+        return value instanceof String && ((String) value).matches("#[A-Fa-f0-9]{6}");
     }
 
     static String icon(Object value, String field) {
@@ -53,7 +63,8 @@ final class Style {
                 case "size": v = Settings.choice(v, field, "small medium large full"); break;
                 case "text_size": v = Settings.choice(v, field, "small medium large xlarge"); break;
                 case "accent": case "background": case "border_color": case "title_color": case "text_color":
-                    if (!(v instanceof String) || !((String) v).matches("#[A-Fa-f0-9]{6}")) throw new Settings.Invalid(field);
+                case "button_background": case "button_text_color": case "button_focus_background": case "button_focus_text_color":
+                    if (!validColor(v)) throw new Settings.Invalid(field);
                     break;
                 case "opacity":
                     v = Settings.integer(v, field, 0, 100);
@@ -84,6 +95,8 @@ final class Style {
                 case "shadow": v = Settings.choice(v, field, "none soft strong"); break;
                 case "glow": v = Settings.choice(v, field, "none accent border"); break;
                 case "accent_style": v = Settings.choice(v, field, "bar badge dot underline none"); break;
+                case "button_shape": v = Settings.choice(v, field, "square rounded pill"); break;
+                case "button_spacing": v = Settings.choice(v, field, "compact normal roomy"); break;
                 case "title_weight": v = Settings.choice(v, field, "bold normal"); break;
                 case "label": v = Settings.choice(v, field, "none category"); break;
                 default: throw new AssertionError(key);

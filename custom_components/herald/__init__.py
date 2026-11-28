@@ -1,10 +1,14 @@
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
+from homeassistant.helpers import config_validation as cv
 
 from .client import ApiError, HeraldClient, valid_pin
 from .const import DOMAIN, PLATFORMS, SPEAKERS
 from .coordinator import Box
 from .services import register, update_snapshots
 from .speakers import Speakers
+
+
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 
 async def async_setup(hass, config):

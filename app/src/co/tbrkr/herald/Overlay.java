@@ -412,7 +412,15 @@ final class Overlay implements CardBoard.Display {
             WindowManager.LayoutParams p = params(r[2] - r[0], r[3] - r[1], "top_left", size);
             p.x = r[0];
             p.y = r[1];
+            if (w.view.spec.video != null) {
+                // Android caps click-through overlay opacity. Target this window for pointer
+                // events inside its bounds and let the app underneath receive outside touches.
+                p.flags &= ~WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
+                p.flags |= WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL;
+            }
             if (w.owner) p.flags &= ~WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE;
+            // Service-owned windows need a hardware renderer to composite the video texture.
+            p.flags |= WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED;
             w.nextLayout = p;
         }
     }

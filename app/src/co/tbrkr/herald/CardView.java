@@ -1,12 +1,14 @@
 package co.tbrkr.herald;
 
 import android.content.Context;
+import android.content.res.ColorStateList;
 import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.LayerDrawable;
+import android.graphics.drawable.StateListDrawable;
 import android.text.SpannableStringBuilder;
 import android.text.Spanned;
 import android.text.TextUtils;
@@ -16,7 +18,7 @@ import android.text.style.StyleSpan;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
-import android.view.SurfaceView;
+import android.view.TextureView;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -26,10 +28,11 @@ import java.util.Locale;
 import java.util.Map;
 
 final class CardView extends FrameLayout {
+    private static final int[][] BUTTON_STATES = {{android.R.attr.state_selected}, {}};
     final CardSpec spec;
     String placement;
     int width;
-    final SurfaceView surface;
+    final TextureView videoTexture;
     private final FrameLayout still;
     private final TextView caption, hint;
     private final LinearLayout buttons, copy, column;
@@ -47,6 +50,7 @@ final class CardView extends FrameLayout {
     final View decoration;
     final String layout;
     private final GradientDrawable shape = new GradientDrawable();
+    private final GradientDrawable stroke = new GradientDrawable();
     private final String corner;
     private final int textColor;
     private final ArrayList<GradientDrawable> halos = new ArrayList<>();
@@ -100,7 +104,11 @@ final class CardView extends FrameLayout {
         }
         if (!"text".equals(layout)) {
             shape.setColor(bg);
-            if (border > 0) shape.setStroke(border, color(s, "border_color"));
+            if (border > 0) {
+                stroke.setColor(Color.TRANSPARENT);
+                stroke.setStroke(border, color(s, "border_color"));
+                setForeground(stroke);
+            }
             setBackground(shape);
             setClipToOutline(true);
         }
@@ -180,9 +188,9 @@ final class CardView extends FrameLayout {
         picture.setScaleType(full ? ImageView.ScaleType.CENTER_CROP : ImageView.ScaleType.FIT_CENTER);
         placeholder = spec.video != null ? IconViews.make(context, icon, pad * 3, accent, images) : null;
         still = new FrameLayout(context);
-        surface = spec.video != null ? new SurfaceView(context) : null;
-        if (surface != null) {
-            media.addView(surface, new LayoutParams(-1,-1));
+        videoTexture = spec.video != null ? new TextureView(context) : null;
+        if (videoTexture != null) {
+            media.addView(videoTexture, new LayoutParams(-1,-1));
             still.setBackgroundColor(0xff181818);
         }
         media.addView(still, new LayoutParams(-1,-1));
@@ -197,14 +205,36 @@ final class CardView extends FrameLayout {
         buttons = new LinearLayout(context);
         hint = label("", body * .8f, false);
         if (!spec.buttons.isEmpty()) {
+            String spacing = (String) s.get("button_spacing");
+            int gap = Math.max(2, Math.round(pad * ("compact".equals(spacing) ? .35f :
+                    "roomy".equals(spacing) ? .8f : .55f)));
+            String buttonShape = (String) s.get("button_shape");
+            float radius = "pill".equals(buttonShape) ? sh : "square".equals(buttonShape) ? 0 : pad / 2f;
             for (Map<String, Object> button : spec.buttons) {
                 TextView label = label((String) button.get("label"), body, true);
                 label.setGravity(Gravity.CENTER);
-                label.setPadding(pad / 3, pad / 3, pad / 3, pad / 3);
-                buttons.addView(label, new LinearLayout.LayoutParams(0, -2, 1f));
+                Map<String, Object> colors = button.containsKey("style")
+                        ? Settings.object(button.get("style"), "buttons") : java.util.Collections.emptyMap();
+                int normalFill = buttonColor(s, colors, "background");
+                int focusFill = buttonColor(s, colors, "focus_background");
+                StateListDrawable states = new StateListDrawable();
+                states.addState(BUTTON_STATES[0], buttonSurface(focusFill, radius, Math.max(2, Math.round(sh * .0025f))));
+                states.addState(BUTTON_STATES[1], buttonSurface(normalFill, radius, 0));
+                label.setBackground(states);
+                label.setTextColor(new ColorStateList(BUTTON_STATES, new int[]{
+                        buttonColor(s, colors, "focus_text_color"), buttonColor(s, colors, "text_color")}));
+                label.setPadding(gap, gap, gap, gap);
+                LinearLayout.LayoutParams cell = new LinearLayout.LayoutParams(0, -1, 1f);
+                if (buttons.getChildCount() > 0) cell.setMarginStart(gap);
+                buttons.addView(label, cell);
             }
-            copy.addView(buttons);
-            copy.addView(hint);
+            LinearLayout.LayoutParams row = new LinearLayout.LayoutParams(-1, -2);
+            row.topMargin = 2 * gap;
+            copy.addView(buttons, row);
+            LinearLayout.LayoutParams hintParams = new LinearLayout.LayoutParams(-1, -2);
+            hintParams.topMargin = gap;
+            hint.setVisibility(GONE);
+            copy.addView(hint, hintParams);
         }
         media.setVisibility(spec.video == null ? GONE : VISIBLE);
         if (full) {
@@ -235,6 +265,18 @@ final class CardView extends FrameLayout {
         return Color.parseColor((String) fields.get(key));
     }
 
+    private static int buttonColor(Map<String, Object> style, Map<String, Object> overrides, String key) {
+        return Color.parseColor((String) overrides.getOrDefault(key, style.get("button_" + key)));
+    }
+
+    private static GradientDrawable buttonSurface(int fill, float radius, int outline) {
+        GradientDrawable surface = new GradientDrawable();
+        surface.setColor(fill);
+        surface.setCornerRadius(radius);
+        if (outline > 0) surface.setStroke(outline, Color.luminance(fill) > .179f ? Color.BLACK : Color.WHITE);
+        return surface;
+    }
+
     private static GradientDrawable circle(int color) {
         GradientDrawable background = new GradientDrawable();
         background.setShape(GradientDrawable.OVAL);
@@ -254,8 +296,14 @@ final class CardView extends FrameLayout {
         float radius = full ? 0 : "pill".equals(corner) ? h / 2f
                 : Math.round(screenHeight * ("small".equals(corner) ? .012f : "medium".equals(corner) ? .02f
                         : "large".equals(corner) ? .03f : 0f));
-        shape.setCornerRadius(radius);
+        setFrameRadius(radius);
         for (int i = 0; i < halos.size(); i++) halos.get(i).setCornerRadius(radius + spreads.get(i));
+    }
+
+    private void setFrameRadius(float radius) {
+        shape.setCornerRadius(radius);
+        stroke.setCornerRadius(radius);
+        invalidateOutline();
     }
 
     void expand(int screenWidth) {
@@ -263,8 +311,8 @@ final class CardView extends FrameLayout {
         full = true;
         placement = "fullscreen";
         width = screenWidth;
-        shape.setCornerRadius(0);
-        // The SurfaceView stays attached to its parent throughout expansion.
+        setFrameRadius(0);
+        // Keep the video texture attached so expansion preserves playback.
         column.removeView(copy);
         column.setLayoutParams(new LayoutParams(-1,-1));
         media.setLayoutParams(new LinearLayout.LayoutParams(-1,-1));
@@ -302,8 +350,6 @@ final class CardView extends FrameLayout {
             boolean lit = canSelect && selected == i;
             if (button.isSelected() == lit) continue;
             button.setSelected(lit);
-            button.setTextColor(lit ? Color.BLACK : Color.WHITE);
-            button.setBackgroundColor(lit ? Color.WHITE : Color.TRANSPARENT);
         }
     }
 
