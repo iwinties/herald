@@ -233,6 +233,7 @@ herald -sS -H @<(auth) -X PUT "$box/v1/images/badge" --data-binary @badge.png
 | `title`, `message`, `from` | Strings truncated without splitting a surrogate pair at 120, 1000 and 40 UTF-16 code units. Sender displays as “From …”. |
 | `image` | Exactly one of `key`, `url` (HTTP/S, 2097152 bytes, 5 s) or `data` (base64, 1048576 decoded bytes). Fetch at acceptance even if waiting. A cache miss, failed fetch or undecodable inline picture leaves the card up and emits image failed. No fetch retry. |
 | `video` | Required `url` (RTSP, HTTP/S progressive, HLS or DASH); optional booleans `tcp` (force RTP over TCP, default true. Set false to try UDP first), `muted` (defaults according to style.video_sound), and `timeout` (integer 3–60 seconds, default 12). No RTSPS or SmoothStreaming. |
+| `video.preview` | Optional still shown while live video connects. Supply `timestamp` (Unix seconds) and one `key` or HTTP(S) `url`. Omit the top-level `image` when using a preview. The TV labels the still with its local snapshot time and hides it on the first live frame. A missing or expired still leaves video running. Stills expire after 120 seconds. |
 | `buttons` | Up to three objects with unique key `id`, string `label` (1–24 UTF-16 units) and `action` (`event` default, `expand`, `dismiss`). Optional `style` accepts `background`, `text_color`, `focus_background` and `focus_text_color` as `#RRGGBB`. Omitted colors inherit from the card. An `expand` action becomes **Minimize** in fullscreen. Selecting it again returns the card to its compact placement and restores the supplied label. |
 | `priority` | low, normal (default), high, critical |
 | `look` | Optional existing look ID. Omit to keep the category appearance. An unknown ID, null or a non-string returns 400 `bad look`. |
@@ -261,7 +262,13 @@ Defaults below are the category base before looks and overrides.
 | over_playback | show, skip | show |
 | night | normal, dim, hide | normal |
 | focus | auto, never | auto |
-| animation | slide, fade, none. Transitions last 250 ms. | slide |
+| transition_in, transition_out | none, fade, slide_auto, slide_left, slide_right, slide_top, slide_bottom, grow, shrink. Append `_fade` to any slide, grow or shrink. | slide_auto in, fade out |
+| transition_expand, transition_minimize | morph, morph_fade, fade, none | morph |
+| attention_animation | none, pulse, double_pulse, glow, nudge | none |
+| text_animation | none, ticker (scrolls overflowing text only) | none |
+| ticker_speed | slow, normal, fast (1.2, 1.8 and 2.7 em per second at the displayed text size) | normal |
+| edge_margin | Whole percent of the screen on each anchored axis, 0–10. Full-width cards fill the horizontal axis. | 3 |
+| animation | Legacy entrance alias: slide, fade, none. Explicit transition_in wins within the same style. | slide |
 | layout | card, text, strip, pill | card |
 | corner | none, small, medium, large, pill | small |
 | border | none, thin, medium, thick | none |
@@ -279,6 +286,8 @@ Defaults below are the category base before looks and overrides.
 | label | none, category (uppercase category name) | none |
 
 Posting an existing ID replaces its whole spec. A showing card that remains eligible in its category keeps its position, restarts its timer and emits `card.updated`. Otherwise it re-enters admission as a new arrival without an ended event for the old spec. A failure to add the window after admission ends the card as `failed`.
+
+Video uses the card’s `style.size` and retains its source aspect ratio. Expanding reuses the playing stream. Encoded resolution and bitrate come from the source.
 
 Pictures decode within 1920 px on the longest side and 2073600 pixels, then scale to at most 1280 px. The still or icon placeholder remains until the first frame. Video timeout starts with visible playback. Early error, end or timeout shows “Live view unavailable”. After the first frame, error or end restores the still with “Live view ended”. The card keeps its timer. An image loaded behind active video reports shown when uncovered.
 
@@ -508,7 +517,7 @@ herald -sS -H @<(auth) -X PUT "$box/v1/settings" --json '{"display":{"max_visibl
 
 | Request | Success | Route errors in check order |
 |---|---|---|
-| No fields. | `categories` array of `{id,name,builtin,look,announce,style,effective}`. `style` contains sparse overrides. `effective` contains all 28 resolved fields with no request overrides. | Shared checks. |
+| No fields. | `categories` array of `{id,name,builtin,look,announce,style,effective}`. `style` contains sparse overrides. `effective` contains all resolved style fields with no request overrides. | Shared checks. |
 
 ```bash
 herald -sS -H @<(auth) "$box/v1/categories"

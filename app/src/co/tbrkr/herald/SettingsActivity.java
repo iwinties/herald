@@ -657,10 +657,100 @@ public final class SettingsActivity extends Activity {
         action("Preview buttons", () -> previewButtons(lookCard(look)));
         lookFields(settings, look, "background", "opacity", "corner", "button_style", "button_shape", "button_spacing");
         if (!moreOptions()) return;
+        motionControls(settings,look,null);
         lookFields(settings, look, "border_color", "border", "shadow", "glow", "accent_style", "title_weight",
                 "button_background", "button_text_color", "button_focus_background", "button_focus_text_color");
         action("Delete Look", () -> confirm("Delete " + look.name + "?", "Categories using this Look will use their fallback.",
                 "Delete", () -> { settings.deleteLook(id); editingLook = null; render(0); }));
+    }
+
+    private static String presetName(String key, String value) {
+        if ("edge_margin".equals(key)) return value + "%";
+        if (value.startsWith("slide_")) {
+            String edge = value.substring(6).replace("_fade","");
+            String name = edge.equals("auto") ? "Slide automatically" :
+                    ("transition_in".equals(key) ? "Slide from " : "Slide to ") + edge;
+            return name + (value.endsWith("_fade") ? " + fade" : "");
+        }
+        if (value.equals("none") && key.equals("transition_out")) return "Disappear instantly";
+        if (value.equals("morph")) return "Smooth resize";
+        if (value.equals("morph_fade")) return "Smooth resize + fade";
+        if (value.equals("ticker")) return "Scroll long text";
+        return label(value.replace("_fade"," + fade").replace('_',' '));
+    }
+
+    private void motionControls(Settings settings, Look look, String category) {
+        groupHeading("Motion");
+        Map<String,Object> saved = look != null ? look.style : java.util.Collections.emptyMap();
+        if (category != null) {
+            for (Map<String,Object> row : settings.categories())
+                if (category.equals(row.get("id"))) saved = Settings.object(row.get("style"),"style");
+        }
+        Map<String,String> labels = new LinkedHashMap<>();
+        labels.put("transition_in","Arrive"); labels.put("transition_out","Leave");
+        labels.put("attention_animation","Attention"); labels.put("transition_expand","Expand");
+        labels.put("transition_minimize","Minimize"); labels.put("text_animation","Text scrolling");
+        labels.put("ticker_speed","Scroll speed");
+        labels.put("edge_margin","Screen edge margin");
+        for (String key : labels.keySet()) {
+            Object inherited;
+            if (look == null) inherited = settings.inheritedMotion(category,key);
+            else {
+                Map<String,Object> sparse = new LinkedHashMap<>(look.style);
+                sparse.remove(key);
+                inherited = settings.resolve("general",sparse).fields.get(key);
+            }
+            String title = labels.get(key);
+            String[] ids = "edge_margin".equals(key) ? "0 1 2 3 4 5 6 7 8 9 10".split(" ")
+                    : ((String)MotionPresets.OPTIONS.get(key)).split(" ");
+            String[] choices = new String[ids.length+1];
+            choices[0] = "Inherit (" + presetName(key,inherited.toString()) + ")";
+            for (int n=0;n<ids.length;n++) choices[n+1] = presetName(key,ids[n]);
+            int selected = saved.containsKey(key) ? java.util.Arrays.asList(ids).indexOf(saved.get(key).toString())+1 : 0;
+            int index = rows.getChildCount();
+            valueRow(title,choices[selected],null).setOnClickListener(v ->
+                    new AlertDialog.Builder(this).setTitle(title).setSingleChoiceItems(choices, selected, (dialog,which) -> {
+                        dialog.dismiss();
+                        act(() -> {
+                            Object next = which == 0 ? null : "edge_margin".equals(key) ? Integer.valueOf(ids[which-1]) : ids[which-1];
+                            if (look != null) {
+                                Look current = settings.look(look.id);
+                                if (current == null) return;
+                                Map<String,Object> values = new LinkedHashMap<>(current.style);
+                                if (next == null) values.remove(key); else values.put(key,next);
+                                settings.putLook(look.id,Json.fields("name",current.name,"style",values));
+                            } else settings.putCategory(category,Json.fields("style",Json.fields(key,next)));
+                            render(index);
+                        });
+                    }).show());
+        }
+        action("Preview motion", () -> new AlertDialog.Builder(this).setTitle("Preview motion")
+                .setItems(new String[]{"Card and scrolling text","Expand and minimize"},(dialog,which) ->
+                        motionPreview(settings,look,category,which == 1)).show());
+    }
+
+    private void motionPreview(Settings settings, Look look, String category, boolean resize) {
+        Map<String,Object> sample = Json.fields("category", category == null ? "general" : category,
+                "title","Community bulletin","message","The planetarium opens at seven. Join the winter sky tour, "
+                + "then visit the main hall for a telescope demonstration and the full evening schedule.");
+        if (look != null) sample.put("look",look.id);
+        if (resize) {
+            // LookPreview constructs the camera layout without starting any media request.
+            sample.put("video",Json.fields("url","https://preview.invalid/camera"));
+            sample.put("buttons",java.util.Collections.singletonList(Json.fields("id","expand","label","Expand","action","expand")));
+        }
+        LookPreview scene = new LookPreview(this,new CardSpec(sample,settings),false);
+        AlertDialog dialog = new AlertDialog.Builder(this).setView(scene).setNegativeButton("Close",null)
+                .setPositiveButton(resize ? (scene.isExpanded() ? "Minimize" : "Expand") : "Replay",null).setNeutralButton("Leave",null).create();
+        dialog.setOnShowListener(ignored -> {
+            scene.arrive();
+            dialog.getButton(-1).setOnClickListener(v -> {
+                if (resize) dialog.getButton(-1).setText(scene.toggleSize() ? "Minimize" : "Expand");
+                else scene.arrive();
+            });
+            dialog.getButton(-3).setOnClickListener(v -> scene.leave(dialog::dismiss));
+        });
+        dialog.show();
     }
 
     private void lookFields(Settings settings, Look look, String... fields) {
@@ -700,6 +790,7 @@ public final class SettingsActivity extends Activity {
                         "message", "This is a test card.")));
                 categoryFields(settings, id, effective, "placement", "size", "duration", "button_style", "button_shape", "button_spacing");
                 if (!moreOptions()) return;
+                motionControls(settings,null,id);
                 categoryFields(settings, id, effective, "accent", "corner", "border", "opacity", "button_background",
                         "button_text_color", "button_focus_background", "button_focus_text_color");
                 action("Reset to default", () -> confirm("Reset " + item.get("name") + "?",

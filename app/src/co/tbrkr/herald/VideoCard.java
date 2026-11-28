@@ -48,6 +48,10 @@ final class VideoCard implements MediaState.Output {
                     .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, MediaState.muted(spec)).build());
             player.setVideoTextureView(view.videoTexture);
             player.addListener(new Player.Listener() {
+                @Override public void onVideoSizeChanged(androidx.media3.common.VideoSize size) {
+                    if (state.owns(generation) && size.height > 0)
+                        view.videoSize(size.width,size.height,size.pixelWidthHeightRatio);
+                }
                 @Override public void onRenderedFirstFrame() {
                     if (state.owns(generation)) state.firstFrame(generation);
                 }

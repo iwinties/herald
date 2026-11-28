@@ -49,12 +49,135 @@ show_card:
         object: {}
     video:
       name: Video
+      description: Use url or camera for live video. Add preview_camera for a recent timestamped snapshot while it connects.
       selector:
         object: {}
     style:
       name: Style
       selector:
-        object: {}
+        object:
+          fields:
+            transition_in: &herald_transition_in
+              label: Arrive
+              selector:
+                select:
+                  options:
+                  - {"label": "None", "value": "none"}
+                  - {"label": "Fade", "value": "fade"}
+                  - {"label": "Slide automatically", "value": "slide_auto"}
+                  - {"label": "Slide from left", "value": "slide_left"}
+                  - {"label": "Slide from right", "value": "slide_right"}
+                  - {"label": "Slide from top", "value": "slide_top"}
+                  - {"label": "Slide from bottom", "value": "slide_bottom"}
+                  - {"label": "Slide automatically + fade", "value": "slide_auto_fade"}
+                  - {"label": "Slide from left + fade", "value": "slide_left_fade"}
+                  - {"label": "Slide from right + fade", "value": "slide_right_fade"}
+                  - {"label": "Slide from top + fade", "value": "slide_top_fade"}
+                  - {"label": "Slide from bottom + fade", "value": "slide_bottom_fade"}
+                  - {"label": "Grow", "value": "grow"}
+                  - {"label": "Shrink", "value": "shrink"}
+                  - {"label": "Grow fade", "value": "grow_fade"}
+                  - {"label": "Shrink fade", "value": "shrink_fade"}
+            transition_out: &herald_transition_out
+              label: Leave
+              selector:
+                select:
+                  options:
+                  - {"label": "Disappear instantly", "value": "none"}
+                  - {"label": "Fade", "value": "fade"}
+                  - {"label": "Slide automatically", "value": "slide_auto"}
+                  - {"label": "Slide to left", "value": "slide_left"}
+                  - {"label": "Slide to right", "value": "slide_right"}
+                  - {"label": "Slide to top", "value": "slide_top"}
+                  - {"label": "Slide to bottom", "value": "slide_bottom"}
+                  - {"label": "Slide automatically + fade", "value": "slide_auto_fade"}
+                  - {"label": "Slide to left + fade", "value": "slide_left_fade"}
+                  - {"label": "Slide to right + fade", "value": "slide_right_fade"}
+                  - {"label": "Slide to top + fade", "value": "slide_top_fade"}
+                  - {"label": "Slide to bottom + fade", "value": "slide_bottom_fade"}
+                  - {"label": "Grow", "value": "grow"}
+                  - {"label": "Shrink", "value": "shrink"}
+                  - {"label": "Grow fade", "value": "grow_fade"}
+                  - {"label": "Shrink fade", "value": "shrink_fade"}
+            attention_animation: &herald_attention_animation
+              label: Attention
+              selector:
+                select:
+                  options:
+                  - {"label": "None", "value": "none"}
+                  - {"label": "Pulse", "value": "pulse"}
+                  - {"label": "Double pulse", "value": "double_pulse"}
+                  - {"label": "Glow", "value": "glow"}
+                  - {"label": "Nudge", "value": "nudge"}
+            transition_expand: &herald_transition_expand
+              label: Expand
+              selector:
+                select:
+                  options:
+                  - {"label": "Smooth resize", "value": "morph"}
+                  - {"label": "Smooth resize + fade", "value": "morph_fade"}
+                  - {"label": "Fade", "value": "fade"}
+                  - {"label": "None", "value": "none"}
+            transition_minimize: &herald_transition_minimize
+              label: Minimize
+              selector:
+                select:
+                  options:
+                  - {"label": "Smooth resize", "value": "morph"}
+                  - {"label": "Smooth resize + fade", "value": "morph_fade"}
+                  - {"label": "Fade", "value": "fade"}
+                  - {"label": "None", "value": "none"}
+            text_animation: &herald_text_animation
+              label: Text scrolling
+              selector:
+                select:
+                  options:
+                  - {"label": "None", "value": "none"}
+                  - {"label": "Scroll long text", "value": "ticker"}
+            ticker_speed: &herald_ticker_speed
+              label: Scroll speed
+              selector:
+                select:
+                  options:
+                  - {label: Slow, value: slow}
+                  - {label: Normal, value: normal}
+                  - {label: Fast, value: fast}
+            edge_margin: &herald_edge_margin {"label": "Screen edge margin (%)", "selector": {"number": {"min": 0, "max": 10, "step": 1, "mode": "box"}}}
+            placement: &herald_placement {"label": "Placement", "selector": {"select": {"options": ["top_left", "top", "top_right", "left", "center", "right", "bottom_left", "bottom", "bottom_right", "fullscreen"]}}}
+            size: &herald_size {"label": "Size", "selector": {"select": {"options": ["small", "medium", "large", "full"]}}}
+            text_size: &herald_text_size {"label": "Text size", "selector": {"select": {"options": ["small", "medium", "large", "xlarge"]}}}
+            layout: &herald_layout {"label": "Layout", "selector": {"select": {"options": ["card", "text", "strip", "pill"]}}}
+            corner: &herald_corner {"label": "Corner", "selector": {"select": {"options": ["none", "small", "medium", "large", "pill"]}}}
+            background: &herald_background {"label": "Background", "selector": {"text": {}}}
+            opacity: &herald_opacity {"label": "Opacity", "selector": {"number": {"min": 0, "max": 100, "step": 5, "mode": "box"}}}
+            border: &herald_border {"label": "Border", "selector": {"select": {"options": ["none", "thin", "medium", "thick"]}}}
+            border_color: &herald_border_color {"label": "Border color", "selector": {"text": {}}}
+            shadow: &herald_shadow {"label": "Shadow", "selector": {"select": {"options": ["none", "soft", "strong"]}}}
+            glow: &herald_glow {"label": "Glow", "selector": {"select": {"options": ["none", "accent", "border"]}}}
+            accent_style: &herald_accent_style {"label": "Accent style", "selector": {"select": {"options": ["bar", "badge", "dot", "underline", "none"]}}}
+            title_color: &herald_title_color {"label": "Title color", "selector": {"text": {}}}
+            text_color: &herald_text_color {"label": "Text color", "selector": {"text": {}}}
+            title_weight: &herald_title_weight {"label": "Title weight", "selector": {"select": {"options": ["bold", "normal"]}}}
+            label: &herald_label {"label": "Label", "selector": {"select": {"options": ["none", "category"]}}}
+            button_style: &herald_button_style {"label": "Button style", "selector": {"select": {"options": ["solid", "outline", "underline", "raised"]}}}
+            button_shape: &herald_button_shape {"label": "Button shape", "selector": {"select": {"options": ["rounded", "square", "pill"]}}}
+            button_spacing: &herald_button_spacing {"label": "Button spacing", "selector": {"select": {"options": ["compact", "normal", "roomy"]}}}
+            button_background: &herald_button_background {"label": "Button background", "selector": {"text": {}}}
+            button_text_color: &herald_button_text_color {"label": "Button text color", "selector": {"text": {}}}
+            button_focus_background: &herald_button_focus_background {"label": "Button focus background", "selector": {"text": {}}}
+            button_focus_text_color: &herald_button_focus_text_color {"label": "Button focus text color", "selector": {"text": {}}}
+            animation: &herald_animation {"label": "Legacy entrance", "selector": {"select": {"options": ["slide", "fade", "none"]}}}
+            accent: {"label": "Accent", "selector": {"text": {}}}
+            icon: {"label": "Icon", "selector": {"text": {}}}
+            duration: {"label": "Duration", "selector": {"number": {"min": 0, "max": 3600, "step": 1, "mode": "box"}}}
+            stacking: {"label": "Stacking", "selector": {"select": {"options": ["replace", "queue", "stack"]}}}
+            sound: {"label": "Sound", "selector": {"text": {}}}
+            sound_volume: {"label": "Sound volume", "selector": {"number": {"min": 0, "max": 100, "step": 1, "mode": "box"}}}
+            video_sound: {"label": "Video sound", "selector": {"select": {"options": ["off", "on"]}}}
+            show_here: {"label": "Show here", "selector": {"boolean": {}}}
+            over_playback: {"label": "Over playback", "selector": {"select": {"options": ["show", "skip"]}}}
+            night: {"label": "Night", "selector": {"select": {"options": ["normal", "dim", "hide"]}}}
+            focus: {"label": "Focus", "selector": {"select": {"options": ["auto", "never"]}}}
     priority:
       name: Priority
       selector:
@@ -508,7 +631,40 @@ save_look:
       name: Style
       required: true
       selector:
-        object: {}
+        object:
+          fields:
+            transition_in: *herald_transition_in
+            transition_out: *herald_transition_out
+            attention_animation: *herald_attention_animation
+            transition_expand: *herald_transition_expand
+            transition_minimize: *herald_transition_minimize
+            text_animation: *herald_text_animation
+            ticker_speed: *herald_ticker_speed
+            edge_margin: *herald_edge_margin
+            placement: *herald_placement
+            size: *herald_size
+            text_size: *herald_text_size
+            layout: *herald_layout
+            corner: *herald_corner
+            background: *herald_background
+            opacity: *herald_opacity
+            border: *herald_border
+            border_color: *herald_border_color
+            shadow: *herald_shadow
+            glow: *herald_glow
+            accent_style: *herald_accent_style
+            title_color: *herald_title_color
+            text_color: *herald_text_color
+            title_weight: *herald_title_weight
+            label: *herald_label
+            button_style: *herald_button_style
+            button_shape: *herald_button_shape
+            button_spacing: *herald_button_spacing
+            button_background: *herald_button_background
+            button_text_color: *herald_button_text_color
+            button_focus_background: *herald_button_focus_background
+            button_focus_text_color: *herald_button_focus_text_color
+            animation: *herald_animation
     name:
       name: Name
       selector:

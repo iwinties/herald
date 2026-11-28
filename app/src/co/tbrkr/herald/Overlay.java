@@ -1,5 +1,8 @@
 package co.tbrkr.herald;
 
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
+import android.animation.ValueAnimator;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -46,6 +49,7 @@ final class Overlay implements CardBoard.Display {
     private final File spool;
     private volatile boolean closed;
     private final Map<String, Window> windows = new HashMap<>();
+    private final Map<String, Window> retiring = new HashMap<>();
     private final Map<CardSpec, File> stills = new HashMap<>();
     private final Map<String, ChipBar> bars = new HashMap<>();
     private final ChipPulse pulses = new ChipPulse();
@@ -69,12 +73,130 @@ final class Overlay implements CardBoard.Display {
         void clear() { dispatcher.unregisterOnBackInvokedCallback(callback); }
     }
 
+    @android.annotation.TargetApi(33)
+    private static void setTouchBounds(View view, int left, int top, int width, int height) {
+        android.view.AttachedSurfaceControl surface = view.getRootSurfaceControl();
+        if (surface != null) surface.setTouchableRegion(new android.graphics.Region(left,top,left+width,top+height));
+    }
+
     private final class Window extends FrameLayout {
         final long position;
         CardView view;
         VideoCard video;
         WindowManager.LayoutParams layout, nextLayout;
         boolean loading, pictured, owner;
+        CardMotion.Frame nextFrame, target, presented;
+        ValueAnimator animator;
+        int screenW, screenH;
+        String slot;
+        boolean resizeSurface;
+        Map<String,Object> appearance;
+
+        void cancelMotion() {
+            if (animator != null) {
+                animator.removeAllListeners();
+                animator.removeAllUpdateListeners();
+                animator.cancel();
+                animator = null;
+            }
+            view.attentionGlow(0);
+        }
+
+        void play(int duration, android.animation.TimeInterpolator curve,
+                java.util.function.Consumer<Float> frame, Runnable end) {
+            if (!ValueAnimator.areAnimatorsEnabled() || duration == 0) {
+                frame.accept(1f); end.run(); return;
+            }
+            ValueAnimator run = ValueAnimator.ofFloat(0,1);
+            animator = run;
+            run.setDuration(duration);
+            run.setInterpolator(curve);
+            run.addUpdateListener(a -> frame.accept((float)a.getAnimatedValue()));
+            run.addListener(new AnimatorListenerAdapter() {
+                @Override public void onAnimationEnd(Animator a) {
+                    if (animator != run) return;
+                    animator = null;
+                    end.run();
+                }
+            });
+            frame.accept(0f);
+            run.start();
+        }
+
+        void drawFrame(CardMotion.Frame frame) {
+            presented = frame;
+            int[] edge = view.insets;
+            int left = Math.round(frame.x), top = Math.round(frame.y);
+            int width = Math.max(1,Math.round(frame.width)), height = Math.max(1,Math.round(frame.height));
+            // Clip at the TV edges while the window itself follows the visible card.
+            int x = Math.max(0,Math.min(screenW-1,left-edge[0]));
+            int y = Math.max(0,Math.min(screenH-1,top-edge[1]));
+            WindowManager.LayoutParams next = new WindowManager.LayoutParams();
+            next.copyFrom(nextLayout);
+            if (resizeSurface) { x = 0; y = 0; }
+            next.x = x; next.y = y;
+            next.width = Math.max(1,Math.min(screenW,left+width+edge[2])-x);
+            next.height = Math.max(1,Math.min(screenH,top+height+edge[3])-y);
+            if (resizeSurface) { next.width = screenW; next.height = screenH; }
+            next.windowAnimations = 0;
+            positionChild(view,left-x,top-y,width,height);
+            positionChild(view.decoration,left-x-edge[0],top-y-edge[1],width+edge[0]+edge[2],height+edge[1]+edge[3]);
+            view.presentation(frame.full);
+            setAlpha(frame.opacity);
+            if (layout == null) {
+                wm.addView(this,next);
+                layout = next;
+            } else if (layout.copyFrom(next) != 0) wm.updateViewLayout(this,layout);
+            if (Build.VERSION.SDK_INT >= 33 && view.spec.video != null)
+                setTouchBounds(this, left-x,top-y,width,height);
+
+        }
+
+        void attention() {
+            String kind = (String)appearance.get("attention_animation");
+            if ("none".equals(kind) || !ValueAnimator.areAnimatorsEnabled()) return;
+            CardMotion.Frame rest = target;
+            int duration = "double_pulse".equals(kind) ? 740 : "glow".equals(kind) ? 650 : "nudge".equals(kind) ? 360 : 450;
+            play(duration,new android.view.animation.LinearInterpolator(), t -> {
+                float wave = (float)Math.pow(Math.sin(Math.PI*t*("double_pulse".equals(kind) ? 2 : 1)),2);
+                if ("glow".equals(kind)) view.attentionGlow(wave);
+                else if ("nudge".equals(kind)) drawFrame(rest.transformed(rest.width*.006f*wave,0,1,1));
+                else drawFrame(rest.transformed(0,0,1+.025f*wave,1));
+            }, () -> { view.attentionGlow(0); drawFrame(rest); });
+        }
+
+        void present(CardMotion.Frame next, boolean fresh) {
+            if (!fresh && next.sameGeometry(target)) {
+                drawFrame(presented);
+                return;
+            }
+            CardMotion.Frame previous = presented;
+            boolean resize = target != null && next.full != target.full;
+            boolean continuing = previous != null && previous.full != next.full;
+            target = next;
+            cancelMotion();
+            resizeSurface = false;
+            if (fresh) {
+                String kind = (String)appearance.get("transition_in");
+                CardMotion.Frame start = CardMotion.edge(next,kind,true,view.placement.startsWith("bottom"));
+                play("none".equals(kind) ? 0 : 250,new android.view.animation.DecelerateInterpolator(),
+                        t -> drawFrame(start.toward(next,t)),this::attention);
+            } else if (resize || continuing) {
+                String kind = (String)appearance.get(next.full == 1 ? "transition_expand" : "transition_minimize");
+                // Keep a single backing surface while moving the video. The touch region tracks the card.
+                resizeSurface = !"none".equals(kind) && ValueAnimator.areAnimatorsEnabled()
+                        && (view.spec.video == null || Build.VERSION.SDK_INT >= 33);
+                play("none".equals(kind) ? 0 : 300,new android.view.animation.AccelerateDecelerateInterpolator(),
+                        t -> {
+                            android.os.Trace.beginSection(t == 0 ? "Herald resize start" : t == 1 ? "Herald resize end" : "Herald resize frame");
+                            try { drawFrame(CardMotion.resize(previous,next,kind,t)); }
+                            finally { android.os.Trace.endSection(); }
+                        }, () -> {
+                            resizeSurface = false;
+                            drawFrame(next);
+                        });
+            } else drawFrame(next);
+        }
         BackRegistration back;
         CardSpec armed;
         int armedKey;
@@ -222,6 +344,7 @@ final class Overlay implements CardBoard.Display {
     }
 
     @Override public void loadImage(CardSpec spec) {
+        if (spec.previewTimestamp != 0 && !CardSpec.freshPreview(spec.previewTimestamp, System.currentTimeMillis()/1000)) return;
         // Include time waiting for a worker or DNS in the URL deadline. A late result is discarded.
         long deadline = SystemClock.elapsedRealtime() + 5000;
         java.util.concurrent.atomic.AtomicBoolean timedOut = new java.util.concurrent.atomic.AtomicBoolean();
@@ -312,11 +435,11 @@ final class Overlay implements CardBoard.Display {
     private void render() {
         if (closed) return;
         synchronized (cards) {
+            if (!service.screenOn() || !service.overlayAllowed()) clearRetiring();
             List<CardBoard.Entry> visible = service.screenOn() ? cards.showing() : new ArrayList<>();
             windows.entrySet().removeIf(pair -> {
                 for (CardBoard.Entry e : visible) if (pair.getKey().equals(e.spec.id) && pair.getValue().position == e.position) return false;
-                pair.getValue().release();
-                remove(pair.getValue());
+                retire(pair.getValue());
                 return true;
             });
             stills.entrySet().removeIf(pair -> {
@@ -334,6 +457,7 @@ final class Overlay implements CardBoard.Display {
             for (CardBoard.Entry e : visible) {
                 Window w = windows.computeIfAbsent(e.spec.id, id -> new Window(service, e.position));
                 if (w.view == null || w.view.spec != e.spec) {
+                    if (w.view != null) w.cancelMotion();
                     w.release();
                     w.removeAllViews();
                     String categoryName = e.spec.category;
@@ -347,6 +471,7 @@ final class Overlay implements CardBoard.Display {
                     w.addView(w.view);
                     w.loading = w.pictured = false;
                 }
+                w.appearance = e.appearance.fields;
                 w.view.setExpanded(e.expanded, size.x);
                 w.owner = e.spec == focus;
                 w.view.buttonFocus(w.owner, paused);
@@ -362,22 +487,17 @@ final class Overlay implements CardBoard.Display {
             for (List<Window> stack : stacks.values()) position(stack, size, gap);
             for (CardBoard.Entry e : visible) {
                 Window w = windows.get(e.spec.id);
-                WindowManager.LayoutParams p = w.nextLayout;
                 try {
-                    if (w.layout == null) {
-                        wm.addView(w,p);
-                        cards.attached(e.spec, System.currentTimeMillis());
-                        w.layout = p;
-                        animate(w, e);
-                    } else if (w.layout.copyFrom(p) != 0) {
-                        wm.updateViewLayout(w, w.layout);
-                    }
+                    boolean fresh = w.layout == null;
+                    w.present(w.nextFrame,fresh);
+                    if (fresh) cards.attached(e.spec, System.currentTimeMillis());
                     if (e.spec.video != null && w.video == null) {
                         w.video = new VideoCard(w.view, cards, service);
                         w.video.start();
                     }
                     restore(w);
                 } catch (RuntimeException denied) {
+                    w.cancelMotion();
                     w.release();
                     remove(w);
                     windows.remove(e.spec.id);
@@ -392,23 +512,26 @@ final class Overlay implements CardBoard.Display {
         int count = stack.size();
         int[][] sizes = new int[count][2], edges = new int[count][], origins = new int[count][2];
         boolean[] fullWidth = new boolean[count];
+        int[] margins = new int[count];
         for (int i = 0; i < count; i++) {
             CardView card = stack.get(i).view;
             sizes[i][0] = card.getMeasuredWidth();
             sizes[i][1] = card.getMeasuredHeight();
             fullWidth[i] = sizes[i][0] == size.x;
             edges[i] = card.insets;
+            margins[i] = (int)stack.get(i).appearance.get("edge_margin");
         }
         int[][] rects = CardFrame.place(stack.get(0).view.placement, size.x, size.y, sizes,
-                fullWidth, gap, edges, origins);
+                fullWidth, gap, edges, origins, margins);
         for (int i = 0; i < count; i++) {
             Window w = stack.get(i);
             int[] r = rects[i], edge = edges[i];
             int x = origins[i][0] - r[0], y = origins[i][1] - r[1];
             int width = sizes[i][0], height = sizes[i][1];
-            positionChild(w.view.decoration, x - edge[0], y - edge[1],
-                    width + edge[0] + edge[2], height + edge[1] + edge[3]);
-            positionChild(w.view, x, y, width, height);
+            w.screenW = size.x; w.screenH = size.y;
+            w.slot = w.view.placement + ":" + i;
+            w.nextFrame = new CardMotion.Frame(origins[i][0],origins[i][1],width,height,1,
+                    "fullscreen".equals(w.view.placement) ? 1 : 0);
             WindowManager.LayoutParams p = params(r[2] - r[0], r[3] - r[1], "top_left", size);
             p.x = r[0];
             p.y = r[1];
@@ -436,13 +559,32 @@ final class Overlay implements CardBoard.Display {
         view.setLayoutParams(lp);
     }
 
-    private static void animate(Window v, CardBoard.Entry entry) {
-        Object animation = entry.appearance.fields.get("animation");
-        if ("fade".equals(animation)) { v.setAlpha(0f); v.animate().alpha(1f).setDuration(250).start(); }
-        if ("slide".equals(animation)) {
-            v.setTranslationY(v.view.placement.startsWith("bottom") ? v.view.getMeasuredHeight() : -v.view.getMeasuredHeight());
-            v.animate().translationY(0f).setDuration(250).start();
+    private void retire(Window w) {
+        w.cancelMotion();
+        String kind = (String)w.appearance.get("transition_out");
+        if (closed || !service.screenOn() || !service.overlayAllowed() || w.presented == null
+                || "none".equals(kind) || !ValueAnimator.areAnimatorsEnabled()) {
+            w.release();
+            remove(w);
+            return;
         }
+        if (w.video != null) w.view.freezeVideo();
+        w.release();
+        Window old = retiring.put(w.slot,w);
+        if (old != null) { old.cancelMotion(); remove(old); }
+        w.nextLayout.flags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE | WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE;
+        if (w.view.spec.video != null) w.nextLayout.alpha = Math.min(w.nextLayout.alpha, .8f);
+        CardMotion.Frame from = w.presented;
+        CardMotion.Frame to = CardMotion.edge(from,kind,false,w.view.placement.startsWith("bottom"));
+        w.play(180,new android.view.animation.AccelerateInterpolator(),t -> w.drawFrame(from.toward(to,t)), () -> {
+            retiring.remove(w.slot,w);
+            remove(w);
+        });
+    }
+
+    private void clearRetiring() {
+        for (Window w : retiring.values()) { w.cancelMotion(); remove(w); }
+        retiring.clear();
     }
 
     private void renderChips(Point size) {
@@ -506,7 +648,9 @@ final class Overlay implements CardBoard.Display {
         main.removeCallbacks(tick);
         main.removeCallbacks(redraw);
         workers.shutdownNow();
+        clearRetiring();
         for (Window w : windows.values()) {
+            w.cancelMotion();
             w.release();
             remove(w);
         }

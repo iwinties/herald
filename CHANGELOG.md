@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.4
+
+- **Camera previews.** Show a recent timestamped snapshot while live video connects. Home Assistant can use a cached camera with `video.preview_camera`. The first live frame replaces the still. [Set up a doorbell camera](examples/home-assistant.md#show-the-porch-camera-when-the-doorbell-rings).
+- **Camera controls.** Actions fit their labels beneath a corner video. Expand fills the screen with the playing camera and keeps Minimize selected in a small floating row. Back closes the card at either size. [Watch the updated demo](docs/images/porch-delivery.mp4).
+- **Card motion.** Choose entrance, exit, attention, expand and minimize effects for a Look or category, or override them on one card. Options include directional slides, fades, scale effects and instant transitions.
+- **On Air ticker.** The built-in banner runs flush along the bottom. Long messages scroll at your chosen speed, and short messages stay still. Omit the title for a message-only ticker. Other cards can set their own screen-edge margin. [See motion and ticker settings](docs/STYLES.md#card-motion-and-the-on-air-ticker).
+- **Upgrade from 0.4.0 or later.** Install the signed APK over the existing TV app, update Herald to 0.5.4 in HACS, and restart Home Assistant. Existing settings and pairings carry over. Earlier versions need the [package migration](#040).
+
 ## 0.5.3
 
 - **Expand and Minimize** switch between the camera card and full screen while the video keeps playing. Back dismisses the card at either size. [Watch the porch delivery demo](docs/images/porch-delivery.mp4) or [use the matching Home Assistant automation](examples/home-assistant.md#show-the-porch-camera-when-the-doorbell-rings).

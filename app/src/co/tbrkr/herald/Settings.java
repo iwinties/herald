@@ -113,6 +113,13 @@ final class Settings {
 
     synchronized Map<String, Object> effective(String categoryId) { return resolve(categoryId, null).fields; }
 
+    synchronized Object inheritedMotion(String id, String key) {
+        Category category = categories.get(categoryId(id));
+        Map<String,Object> overrides = new LinkedHashMap<>(category.overrides);
+        overrides.remove(key);
+        return category.style.merge(look(category.look).style,"look").merge(overrides,"style").fields.get(key);
+    }
+
     synchronized boolean categoryAnnounce(String id) { return categories.get(categoryId(id)).announce; }
 
     synchronized Look look(String id) {

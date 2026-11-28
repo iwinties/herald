@@ -27,7 +27,7 @@ Install Herald on both the TV and Home Assistant. Each TV box and the HA integra
 
 **Manual installation.** Copy the `custom_components/herald` folder from the matching release tag into `<config>/custom_components/`. The manifest should be at `<config>/custom_components/herald/manifest.json`. Restart Home Assistant.
 
-[Upgrade instructions for existing installations](../CHANGELOG.md#053).
+[Upgrade instructions for existing installations](../CHANGELOG.md#054).
 
 ### Add a box
 
@@ -62,6 +62,10 @@ Set a reachable **internal Home Assistant URL** under **Settings → System → 
 
 A speaker already playing skips a nonurgent request. During night hours, `urgent` requires urgent=true, `never` silences all calls, and `always` permits playback subject to the playing check. One request runs per speaker with up to five waiting. The speaker temporarily uses its configured volume and restores the observed volume (or last known volume) after playback, then turns off again if it was off. If no volume was observable it restores the off state without guessing. Playback waits at most clip length + 15 s, capped at 120 s. Responses can report skipped playing, quiet hours, busy or duplicate. Show/card, box output and box volume apply to boxes only.
 
+### Motion and tickers
+
+Open **Style** in **Show card** or **Save Look** to choose motion and screen edge margin. Omit a field to inherit it. For a full-width, message-only ticker use the On Air Look and leave the title empty. [Ticker and camera examples](../examples/home-assistant.md#run-a-full-width-ticker-along-the-bottom).
+
 ### Actions
 
 [Show a live porch camera with Expand and Dismiss when the doorbell rings](../examples/home-assistant.md#show-the-porch-camera-when-the-doorbell-rings).
@@ -92,7 +96,9 @@ data:
       action: dismiss
 ```
 
-Pass a named `look` and override individual fields with `style`. For stills, use image.camera (HA snapshot), image.media, image.path (allowlisted), image.url, image.data or image.key. HA pushes local image bytes (up to 2 MiB) under a content-derived key after checking the cache. For video choose video.url or video.camera; the latter must supply a stream source. Both support muted, tcp and timeout.
+Pass a named `look` and override individual fields with `style`. For stills, use image.camera (HA snapshot), image.media, image.path (allowlisted), image.url, image.data or image.key. HA pushes local image bytes (up to 2 MiB) under a content-derived key after checking the cache. For video choose video.url or video.camera; the latter must supply a stream source. Both support muted, tcp and timeout. Set `style.size` to change the displayed card width. To change the encoded resolution or bandwidth, choose a different source URL or camera entity if your camera offers one.
+
+For a dated still while video connects, set `video.preview_camera` to a cached snapshot camera such as a ring-mqtt snapshot entity. The entity must publish a numeric `timestamp` in Unix seconds. The TV fetches a recent still from HA in parallel with playback and shows its time in the TV’s time zone. For ring-mqtt this is when the bridge last updated the snapshot. Missing, unavailable or older-than-two-minute snapshots leave the live card usable. The TV must be able to reach HA’s internal URL. [Porch example](../examples/home-assistant.md#show-the-porch-camera-when-the-doorbell-rings).
 
 To show and speak the same card, set `announce: true`. Omit it to let each box use its category default, or set it to false to silence speech even for a speaking category. Only explicit true enables Cast playback or HA voice preparation for this action.
 

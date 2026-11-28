@@ -320,6 +320,7 @@ public final class PureTest {
         video.put("tcp", false);
         eq(false, new CardSpec(card, settings).video.get("tcp"), "explicit UDP first");
         pass("video tcp defaults to true and an explicit false is kept");
+        motionGeometry();
         builtinLooks();
         pass("looks: the nine built-in looks resolve with the documented values");
         lookPrecedence();
@@ -871,6 +872,47 @@ public final class PureTest {
         eq(-1L, pulses.start("a"), "forgot expired");
     }
 
+    static void motionGeometry() {
+        CardMotion.Frame corner = new CardMotion.Frame(713,37,320,180,1,0);
+        CardMotion.Frame full = new CardMotion.Frame(0,0,1280,720,1,1);
+        for (String preset : MotionPresets.TRANSITIONS.split(" ")) {
+            for (boolean entering : new boolean[]{true,false}) {
+                CardMotion.Frame edge = CardMotion.edge(corner,preset,entering,false);
+                if (preset.startsWith("slide_left")) eq(393f,edge.x,preset);
+                if (preset.startsWith("slide_right")) eq(1033f,edge.x,preset);
+                if (preset.startsWith("slide_bottom")) eq(217f,edge.y,preset);
+                if (preset.startsWith("slide_top") || preset.startsWith("slide_auto")) eq(-143f,edge.y,preset);
+                eq(preset.contains("fade") ? 0f : 1f,edge.opacity,preset);
+                if (preset.startsWith("grow")) eq(entering, edge.width < corner.width,preset);
+                if (preset.startsWith("shrink")) eq(entering, edge.width > corner.width,preset);
+            }
+        }
+        for (String preset : new String[]{"morph","morph_fade","fade"}) {
+            for (float t : new float[]{.25f,.5f,.75f}) {
+                CardMotion.Frame mid = CardMotion.resize(corner,full,preset,t);
+                CardMotion.Frame reverse = CardMotion.resize(mid,corner,preset,0);
+                eq(true,reverse.sameGeometry(mid),"no jump on reversing resize");
+                eq(mid.opacity,reverse.opacity,"no brightness jump");
+                CardMotion.Frame again = CardMotion.resize(reverse,corner,preset,.25f);
+                eq(true,CardMotion.resize(again,full,preset,0).sameGeometry(again),"second reversal");
+                eq(true,CardMotion.resize(again,corner,preset,1).sameGeometry(corner),"compact endpoint");
+            }
+        }
+        eq(12f,CardMotion.tickerOffset(150,100,10,1900,CardMotion.tickerEmPerSecond("slow")),"slow ticker");
+        eq(27f,CardMotion.tickerOffset(150,100,10,1900,CardMotion.tickerEmPerSecond("fast")),"fast ticker");
+        eq(0f,CardMotion.tickerOffset(100,100,10,2000,CardMotion.tickerEmPerSecond("normal")),"exact fit stays still");
+        eq(0f,CardMotion.tickerOffset(101,100,10,900,CardMotion.tickerEmPerSecond("normal")),"starts with a reading pause");
+        eq(18f,CardMotion.tickerOffset(101,100,10,1900,CardMotion.tickerEmPerSecond("normal")),"one pixel overflow moves at 1.8 em/s");
+        eq(0f,CardMotion.tickerOffset(150,100,10,10900,CardMotion.tickerEmPerSecond("normal")),"seamless next copy");
+        eq(0f,CardMotion.tickerOffset(101,102,10,1900,CardMotion.tickerEmPerSecond("normal")),"resized viewport fits");
+        int[][] origins = new int[2][2];
+        CardFrame.place("bottom",1920,1080,new int[][]{{1920,64},{480,80}},
+                new boolean[]{true,false},16,new int[][]{{0,0,0,0},{4,4,4,4}},origins,new int[]{0,3});
+        eq(1016,origins[0][1],"bottom banner touches the last screen pixel");
+        eq(920,origins[1][1],"stack gap is independent of screen edge margin");
+        pass("motion directions, opacity, interrupted resize and endpoint geometry");
+    }
+
     static void builtinLooks() throws IOException {
         Fake f = new Fake();
         List<Map<String, Object>> expected = List.of(
@@ -901,6 +943,8 @@ public final class PureTest {
                         "glow", "none", "accent_style", "badge", "background", "#181C24",
                         "opacity", 80, "title_color", "#FFFFFF", "text_color", "#FFFFFF",
                         "title_weight", "bold", "label", "none"));
+        expected.get(2).putAll(Json.fields("transition_in", "fade", "transition_out", "fade"));
+        expected.get(3).putAll(Json.fields("transition_in", "slide_top", "transition_out", "slide_top"));
         String[] ids = "classic glass minimal banner alert pill paper-note night-shift on-air".split(" ");
         List<?> rows = (List<?>) ok(f.route("GET", "looks", Json.fields())).get("looks");
         eq(ids.length, rows.size(), "nine looks");
@@ -914,6 +958,26 @@ public final class PureTest {
             Map<String, Object> fields = Json.parse(Json.stringify(f.settings.resolve("general", ids[i], null).fields));
             overrides.forEach((key, value) -> eq(value, fields.get(key), key));
         }
+        for (String key : MotionPresets.OPTIONS.keySet()) {
+            for (String value : MotionPresets.OPTIONS.get(key).toString().split(" "))
+                eq(value, f.settings.resolve("general", Json.fields(key, value)).fields.get(key), key);
+        }
+        eq("normal", f.settings.effective("general").get("ticker_speed"), "previous ticker pace by default");
+        f.settings.putLook("slow_news", at("style.ticker_speed", "slow"));
+        f.settings.putCategory("general", Json.fields("look", "slow_news"));
+        f.restart();
+        eq("slow", f.settings.resolve("general", "on-air", null).fields.get("ticker_speed"), "On Air inherits saved pace");
+        eq("fast", f.settings.resolve("general", "on-air", Json.fields("ticker_speed","fast")).fields.get("ticker_speed"), "per-card rate override");
+        f.settings.putLook("old_motion", at("style.animation", "none"));
+        f.settings.putCategory("general", Json.fields("look", "old_motion", "style", Json.fields("transition_in", "grow")));
+        f.restart();
+        eq("grow", f.settings.effective("general").get("transition_in"), "new category beats legacy Look");
+        eq("none", f.settings.resolve("general", "old_motion", null).fields.get("transition_in"), "legacy request Look wins");
+        eq("fade", f.settings.resolve("general", Json.fields("animation", "fade")).fields.get("transition_in"), "legacy card wins");
+        eq("shrink", f.settings.resolve("general", Json.fields("animation", "none", "transition_in", "shrink")).fields.get("transition_in"), "explicit arrival wins in same layer");
+        f.settings.putCategory("general", at("style.transition_in", null));
+        eq("none", f.settings.effective("general").get("transition_in"), "cleared override inherits");
+        eq(Json.fields("animation", "none"), f.settings.look("old_motion").style, "legacy sparse round trip");
         f.settings.putLook("night_shift", at("style.button_focus_background", "#FFFFFF"));
         f.settings.putCategory("reminder", Json.fields("look", "night_shift"));
         f.settings.put(at("ntfy.topics", List.of(Json.fields("topic", "porch", "look", "night-shift"))));
@@ -1129,7 +1193,7 @@ public final class PureTest {
             eq(mix[i], row.get("look"), "Mix");
             eq(false, row.get("announce"), "silent default");
             eq(Json.fields(), row.get("style"), "no overrides");
-            eq(35, Settings.object(row.get("effective"), "effective").size(), "full style");
+            eq(Style.defaults("info", "#4FC3F7", 10, "queue", "medium", "normal").fields.keySet(), Settings.object(row.get("effective"), "effective").keySet(), "full style");
         }
         f.settings.putCategory("extra", Json.fields());
         check(!f.settings.categoryAnnounce("extra"), "custom defaults silent");
@@ -2705,6 +2769,8 @@ public final class PureTest {
             eq(ids[i], row.get("id"), "category id");
             eq(Character.toUpperCase(ids[i].charAt(0)) + ids[i].substring(1), row.get("name"), "name");
             eq(true, row.get("builtin"), "built-in flag");
+            expected.get(i).put("edge_margin",3);
+            expected.get(i).putAll(MotionPresets.DEFAULTS);
             expected.get(i).putAll(Json.fields("button_style", "solid", "button_shape", "rounded", "button_spacing", "normal",
                     "button_background", "#303A46", "button_text_color", "#DCE3EA",
                     "button_focus_background", "#526579", "button_focus_text_color", "#F3F6F8"));
@@ -3464,7 +3530,28 @@ public final class PureTest {
         eq(card,f.cards.focusOwner(),"eligible as soon as quiet");
     }
 
+    static void cameraPreview() throws Exception {
+        Fake f = new Fake(); f.token=f.issue("test");
+        long now = 1800000000;
+        Map<String,Object> preview = Json.fields("timestamp", now, "key", "door");
+        Map<String,Object> video = Json.fields("url", "rtsp://fixture/live", "preview", preview);
+        CardSpec spec = new CardSpec(Json.parse(Json.stringify(Json.fields("video", video))), f.settings);
+        eq(now, spec.previewTimestamp, "preview uses source timestamp over JSON");
+        eq("door",spec.withId("test").image.get("key"),"key survives instance copy");
+        eq(now,spec.silent().previewTimestamp,"stamp survives quiet admission");
+        eq(0L,new CardSpec(Json.fields("video",Json.fields("url","rtsp://fixture/live")),f.settings).previewTimestamp,"legacy video");
+        check(CardSpec.freshPreview(now-120,now) && CardSpec.freshPreview(now+2,now),"fresh preview boundaries");
+        check(!CardSpec.freshPreview(now-121,now) && !CardSpec.freshPreview(now+3,now),"stale and future omitted");
+        for (Object invalid : List.of("123",1.5,0,-1,253402300800L))
+            error(f.route("POST","cards",Json.fields("video",Json.fields("url","rtsp://fixture/live",
+                    "preview",Json.fields("key","door","timestamp",invalid)))),400,"bad video");
+        error(f.route("POST","cards",Json.fields("image", Json.fields("key","other"),"video",video)),400,"bad video");
+        eq("showing",ok(f.route("POST","cards",Json.fields("video",Json.fields("url","rtsp://fixture/live",
+                "preview",Json.fields("url","http://fixture/still","timestamp",now))))).get("state"),"timestamped URL card accepted");
+    }
+
     static void imageRoutes() throws Exception {
+        cameraPreview();
         Fake f = new Fake(); f.token=f.issue("test");
         error(run(f.api,stream("PUT /v1/images/.bad HTTP/1.1\r\nContent-Length: 2097153\r\n\r\n")),413,"body too large");
         error(rawImage(f,".bad",new byte[0]),400,"bad key");

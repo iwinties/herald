@@ -1,4 +1,6 @@
+import asyncio
 import json
+import time
 import os
 import sys
 from types import SimpleNamespace
@@ -10,6 +12,19 @@ from homeassistant.helpers import entity_registry as er
 
 
 async def exercise(hass, a, b, root):
+    from pathlib import Path
+    import yaml
+    from homeassistant.helpers.selector import selector
+
+    services = yaml.safe_load((Path(__file__).parents[2] / "custom_components/herald/services.yaml").read_text())
+    for name in ("show_card", "save_look"):
+        schema = services[name]["fields"]["style"]["selector"]
+        selector(schema)
+        fields = schema["object"]["fields"]
+        assert all(key in fields for key in ("transition_in","transition_out","attention_animation","text_animation","transition_expand","transition_minimize","edge_margin"))
+        speeds = fields["ticker_speed"]["selector"]["select"]["options"]
+        assert [item["value"] for item in speeds] == ["slow", "normal", "fast"]
+        assert ("duration" in fields) == (name == "show_card")
     x, y = [(await pair(hass, f)).runtime_data for f in (a, b)]
 
     async def east(service, **kwargs):
@@ -19,6 +34,52 @@ async def exercise(hass, a, b, root):
 
     def last(fake, path="announce"):
         return fake.seen("POST", path)[-1]
+
+    from homeassistant.helpers.aiohttp_client import async_get_clientsession
+
+    entity = "camera.porch_snapshot"
+    stamp = int(time.time())
+    hass.states.async_set(entity, "idle", {"timestamp": stamp})
+    live = {"url": "rtsp://fixture/live", "preview_camera": entity}
+    client = async_get_clientsession(hass)
+    reading, ready = asyncio.Event(), asyncio.Event()
+
+    async def get_still(*args, **kwargs):
+        reading.set()
+        await ready.wait()
+        return SimpleNamespace(content=b"cached snapshot")
+
+    with patch("homeassistant.components.camera.async_get_image", side_effect=get_still) as read:
+        assert (await east("show_card", id="preview-test", video=live))["ok"]
+        sent = last(a, "cards")["video"]
+        assert sent["url"] == live["url"] and sent["preview"]["timestamp"] == stamp
+        assert "preview_camera" not in sent
+        read.assert_not_awaited()
+        preview_url = sent["preview"]["url"]
+        assert "authSig=" in preview_url
+        async with client.get(preview_url.split("?")[0]) as reply:
+            assert reply.status == 401
+        pending = asyncio.create_task(client.get(preview_url))
+        await asyncio.wait_for(reading.wait(), 5)
+        ready.set()
+        async with await pending as reply:
+            assert reply.status == 200 and await reply.read() == b"cached snapshot"
+            assert reply.headers["Cache-Control"] == "no-store"
+        ready.clear()
+        reading.clear()
+        pending = asyncio.create_task(client.get(preview_url))
+        await asyncio.wait_for(reading.wait(), 5)
+        hass.states.async_set(entity, "idle", {"timestamp": stamp - 1})
+        ready.set()
+        async with await pending as reply:
+            assert reply.status == 404
+        for attrs in ({}, {"timestamp": stamp - 121}, {"timestamp": stamp + 20}):
+            hass.states.async_set(entity, "idle", attrs)
+            assert (await east("show_card", id="preview-test", video=live))["ok"]
+            assert last(a, "cards")["video"] == {"url": live["url"]}
+        assert read.await_count == 2
+    assert (await east("clear_card", id="preview-test"))["ok"]
+    print("PASS video is posted before the optional signed still is fetched; stale and changed previews are skipped")
 
     fields = dict(
         id="full",
@@ -35,7 +96,9 @@ async def exercise(hass, a, b, root):
         icon="none",
         buttons=[{"id": "ok", "label": "OK", "style": {"background": "#305478"}}],
         priority="high",
-        style={"duration": 3, "button_shape": "pill", "button_spacing": "roomy"},
+        style={"duration": 3, "button_shape": "pill", "button_spacing": "roomy",
+               "transition_in": "slide_right_fade", "transition_out": "none", "transition_minimize": "morph",
+               "attention_animation": "double_pulse", "text_animation": "ticker", "ticker_speed": "slow", "edge_margin": 0},
     )
     fields["from"] = "test"
     assert (await east("show_card", **fields))["ok"] and last(a, "cards") == fields
@@ -432,7 +495,7 @@ async def exercise(hass, a, b, root):
     )
 
     for fields in (
-        {"name": "My look", "style": {"opacity": 50}},
+        {"name": "My look", "style": {"opacity": 50, "transition_expand": "fade", "animation": "none"}},
         {"style": {"corner": "small"}},
     ):
         reply = await east("save_look", id="custom", **fields)

@@ -26,6 +26,8 @@ final class Style {
                 "shadow", "none", "glow", "none", "accent_style", "bar", "title_color", "#FFFFFF",
                 "text_color", "#FFFFFF", "title_weight", "bold", "label", "none");
         values.putAll(BUTTON_DEFAULTS);
+        values.put("edge_margin",3);
+        values.putAll(MotionPresets.DEFAULTS);
         return new Style(values);
     }
 
@@ -72,6 +74,7 @@ final class Style {
                     if ((int) v % 5 != 0) throw new Settings.Invalid(field);
                     break;
                 case "icon": v = icon(v, field); break;
+                case "edge_margin": v = Settings.integer(v, field, 0, 10); break;
                 case "duration":
                     v = Settings.integer(v, field, 0, 3600);
                     if ((int) v == 1 || (int) v == 2) throw new Settings.Invalid(field);
@@ -101,9 +104,15 @@ final class Style {
                 case "button_spacing": v = Settings.choice(v, field, "compact normal roomy"); break;
                 case "title_weight": v = Settings.choice(v, field, "bold normal"); break;
                 case "label": v = Settings.choice(v, field, "none category"); break;
-                default: throw new AssertionError(key);
+                default:
+                    if (!MotionPresets.OPTIONS.containsKey(key)) throw new AssertionError(key);
+                    v = Settings.choice(v, field, (String) MotionPresets.OPTIONS.get(key));
             }
             result.put(key, v);
+        }
+        if (patch.containsKey("animation") && !patch.containsKey("transition_in")) {
+            Object old = patch.get("animation");
+            result.put("transition_in", "slide".equals(old) ? "slide_auto" : old);
         }
         Settings.rejectUnknown(patch, fields, path);
         return new Style(result);

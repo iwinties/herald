@@ -16,18 +16,28 @@ final class CardFrame {
     // The renderer also needs the original content origin to clip the layers without shifting them.
     static int[][] place(String placement, int screenW, int screenH, int[][] contentSizes,
             boolean[] fullWidth, int gap, int[][] insets, int[][] origins) {
+        int[] margins = new int[contentSizes.length];
+        java.util.Arrays.fill(margins,3);
+        return place(placement,screenW,screenH,contentSizes,fullWidth,gap,insets,origins,margins);
+    }
+
+    static int[][] place(String placement, int screenW, int screenH, int[][] contentSizes,
+            boolean[] fullWidth, int gap, int[][] insets, int[][] origins, int[] margins) {
         int count = contentSizes.length;
         int total = Math.max(0, count - 1) * gap;
         for (int[] size : contentSizes) total += size[1];
-        int marginY = Math.round(.03f * screenH);
+        boolean top = placement.startsWith("top");
         boolean bottom = placement.startsWith("bottom");
-        int cursor = placement.startsWith("top") ? marginY : bottom ? screenH - marginY
+        int cursor = top ? 0 : bottom ? screenH
                 : Math.round((screenH - total) / 2f);
         int[][] windows = new int[count][4];
         for (int i = 0; i < count; i++) {
             int w = fullWidth[i] ? screenW : contentSizes[i][0];
             int h = contentSizes[i][1];
-            int marginX = w == screenW ? 0 : Math.round(.03f * screenW);
+            int marginX = w == screenW ? 0 : Math.round(margins[i] * screenW / 100f);
+            int marginY = Math.round(margins[i] * screenH / 100f);
+            if (top) cursor = Math.max(cursor,marginY);
+            if (bottom) cursor = Math.min(cursor,screenH-marginY);
             int x = placement.endsWith("left") ? marginX : placement.endsWith("right")
                     ? screenW - marginX - w : Math.round((screenW - w) / 2f);
             int y = bottom ? cursor - h : cursor;

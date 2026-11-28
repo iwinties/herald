@@ -2,9 +2,27 @@
 
 [Install and pair a box](../docs/HOME_ASSISTANT.md#add-a-box) first. Replace the sample entity IDs with yours. Use the Herald notification entity for your TV wherever you see `notify.living_room_tv`. Leaving TV and speaker targets empty sends an announcement to **all connected TVs and configured speakers**.
 
+## Run a full-width ticker along the bottom
+
+Send a message without a title to use the whole ticker. On Air supplies the placement, zero edge margin and overflow scrolling. This example overrides just the exit.
+
+```yaml
+action: herald.show_card
+data:
+  entity_id: notify.living_room_tv
+  look: on-air
+  message: >-
+    Tonight at the planetarium, the winter sky tour begins at seven. Doors open early
+    for the telescope demonstration. Meet in the main hall afterward for the observing schedule.
+  style:
+    duration: 30
+    ticker_speed: slow
+    transition_out: fade
+```
+
 ## Show the porch camera when the doorbell rings
 
-When someone rings, the TV shows the porch over the current program. **Expand** opens the camera full screen and becomes **Minimize**. Press OK again to put the playing video back in its corner. **Back** closes the card, and **Dismiss** closes it directly from the corner. The stream is muted so the program audio can continue. [Watch the illustrated delivery demo](../docs/images/porch-delivery.mp4).
+When someone rings, the TV shows the porch over the current program. Choose **Expand** beneath the picture. The camera fills the screen, and **Minimize** stays selected in a small row over the footage. Press OK again to put the playing video back in its corner. **Back** closes the card, and **Dismiss** closes it directly from the corner. The stream is muted so the program audio can continue. [Watch the illustrated delivery demo](../docs/images/porch-delivery.mp4).
 
 ```yaml
 alias: Show the live porch camera when the doorbell rings
@@ -22,11 +40,15 @@ actions:
       title: Doorbell
       message: Someone is at the front porch.
       look: glass
-      video:
-        camera: camera.front_porch
-        muted: true
       style:
         duration: 30
+        size: large
+        transition_expand: morph
+        transition_minimize: morph_fade
+      video:
+        camera: camera.front_porch
+        preview_camera: camera.front_porch_snapshot
+        muted: true
       buttons:
         - {id: expand, label: Expand, action: expand}
         - {id: dismiss, label: Dismiss, action: dismiss}
@@ -34,7 +56,7 @@ actions:
 mode: restart
 ```
 
-Replace the doorbell sensor, camera and TV with your entities. The camera must supply a stream URL the TV can reach. For a snapshot-only camera, use `image: {camera: camera.front_porch}` in place of the `video` block and remove the Expand action. The docs demo plays an illustrated delivery through Herald’s video player.
+Replace the doorbell sensor, camera and TV with your entities. The optional `preview_camera` is a cached snapshot camera that supplies a Unix-seconds `timestamp` attribute. A recent still appears with its time until the first live frame. Omit this line if your source has no timestamp. Here, `size: large` makes the corner card 44% of the screen width. The camera must supply a stream URL the TV can reach. For a snapshot-only camera, use `image: {camera: camera.front_porch}` in place of the `video` block and remove the Expand action. The docs demo plays an illustrated delivery through Herald’s video player.
 
 ## Call everyone to dinner from a dashboard
 

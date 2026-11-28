@@ -5,6 +5,7 @@ import android.graphics.BlurMaskFilter;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
+import android.graphics.Rect;
 import android.graphics.PorterDuff;
 import android.graphics.PorterDuffXfermode;
 
@@ -24,6 +25,30 @@ final class DropShadow {
 
     void draw(Canvas canvas, int left, int top, int width, int height, float radius) {
         if (reach == 0 || width <= 0 || height <= 0) return;
+        prepare(width,height,radius);
+        canvas.drawBitmap(mask, left - reach, top - reach + offset, blit);
+    }
+
+    /** Stretch only the flat runs of a small blur mask while the video card changes size. */
+    void drawMoving(Canvas canvas, int left, int top, int width, int height, float radius) {
+        if (reach == 0 || width <= 0 || height <= 0) return;
+        int cap = 2*reach + (int)Math.ceil(radius);
+        int source = 2*cap + 1;
+        prepare(source,source,radius);
+        int border = cap+reach;
+        int outerWidth = width+2*reach, outerHeight = height+2*reach;
+        int bx = Math.min(border,outerWidth/2), by = Math.min(border,outerHeight/2);
+        int[] cuts = {0,border,border+1,mask.getWidth()};
+        int[] xs = {0,bx,outerWidth-bx,outerWidth}, ys = {0,by,outerHeight-by,outerHeight};
+        int x = left-reach, y = top-reach+offset;
+        for (int row=0; row<3; row++) for (int col=0; col<3; col++) {
+            if (row == 1 && col == 1) continue;
+            canvas.drawBitmap(mask, new Rect(cuts[col],cuts[row],cuts[col+1],cuts[row+1]),
+                    new Rect(x+xs[col],y+ys[row],x+xs[col+1],y+ys[row+1]),blit);
+        }
+    }
+
+    private void prepare(int width, int height, float radius) {
         int w = width + 2 * reach, h = height + 2 * reach;
         if (mask == null || mask.getWidth() != w || mask.getHeight() != h || lastRadius != radius) {
             mask = Bitmap.createBitmap(w, h, Bitmap.Config.ALPHA_8);
@@ -46,6 +71,5 @@ final class DropShadow {
             buffer.drawRoundRect(reach, faceTop, reach + width, faceTop + height, radius, radius, paint);
             lastRadius = radius;
         }
-        canvas.drawBitmap(mask, left - reach, top - reach + offset, blit);
     }
 }

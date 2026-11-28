@@ -39,7 +39,7 @@ rm -rf "$w"
 mkdir -p "$w/test" "$w/classes" "$w/dex"
 
 javac -d "$w/test" "$p/TlsIdentity.java" "$p/Http.java" "$p/Json.java" "$p/Api.java" "$p/Auth.java" "$p/EventLog.java" "$p/Backend.java" \
-  "$p/Compat.java" "$p/MqttTopics.java" "$p/Ntfy.java" "$p/SoundDecision.java" "$p/Settings.java" "$p/Style.java" "$p/Setup.java" "$p/SettingsModel.java" "$p/PairingText.java" "$p/SpokenCards.java" "$p/ChipLayout.java" "$p/ChipPulse.java" "$p/KeyPolicy.java" "$p/CardFrame.java" "$p/Look.java" "$p/Category.java" "$p/Cidr.java" \
+  "$p/Compat.java" "$p/MqttTopics.java" "$p/Ntfy.java" "$p/SoundDecision.java" "$p/Settings.java" "$p/Style.java" "$p/MotionPresets.java" "$p/CardMotion.java" "$p/Setup.java" "$p/SettingsModel.java" "$p/PairingText.java" "$p/SpokenCards.java" "$p/ChipLayout.java" "$p/ChipPulse.java" "$p/KeyPolicy.java" "$p/CardFrame.java" "$p/Look.java" "$p/Category.java" "$p/Cidr.java" \
   "$p/AnnounceSpec.java" "$p/RequestIds.java" "$p/CardSpec.java" "$p/CardBoard.java" "$p/MediaState.java" "$p/ChipSpec.java" "$p/ChipBoard.java" "$p/ImageStore.java" \
   "$p/ClipStore.java" "$p/Chime.java" "$p/AudioTiming.java" /src/app/test/co/tbrkr/herald/PureTest.java >&2
 keytool -genkeypair -keystore "$w/tls-test.p12" -storetype PKCS12 -storepass herald-test \

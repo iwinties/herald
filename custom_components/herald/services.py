@@ -21,6 +21,7 @@ from homeassistant.helpers.service import async_set_service_schema
 
 from .client import SAFE_ERRORS, ApiError
 from .const import DOMAIN, MAX_CLIP, MAX_IMAGE
+from .preview import prepare_preview
 
 KEY = vol.Match(r"^[A-Za-z0-9_-][A-Za-z0-9_.-]{0,63}\Z")
 TARGET = {
@@ -487,6 +488,10 @@ def register(hass):
         data = dict(call.data)
         available = hass.data[DOMAIN]["boxes"]
         options = hass.data[DOMAIN]["speakers"].options
+        if call.service == "show_card":
+            data = await prepare_preview(hass, data, call.context.user_id)
+        elif call.service == "announce" and isinstance(data.get("card"), dict):
+            data["card"] = await prepare_preview(hass, data["card"], call.context.user_id)
         ids = data.pop("device_id", None)
         if ids is not None and (not ids or any(i not in available for i in ids)):
             raise ServiceValidationError("Select a loaded Herald box")

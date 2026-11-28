@@ -15,6 +15,12 @@ final class CardSpec {
     final List<Map<String, Object>> buttons;
     final Style style;
     final boolean idGiven;
+    final long previewTimestamp;
+    static final long PREVIEW_AGE_SECONDS = 120;
+
+    static boolean freshPreview(long timestamp, long nowSeconds) {
+        return timestamp > 0 && timestamp >= nowSeconds - PREVIEW_AGE_SECONDS && timestamp <= nowSeconds + 2;
+    }
 
     static boolean key(Object v) {
         return v instanceof String && ((String) v).matches("[A-Za-z0-9_-][A-Za-z0-9_.-]{0,63}");
@@ -58,8 +64,7 @@ final class CardSpec {
         return Settings.object(value, error);
     }
 
-    private static Map<String, Object> video(Object value) {
-        Map<String, Object> m = object(value, "video");
+    private static Map<String, Object> video(Map<String, Object> m) {
         Object tcp = m.getOrDefault("tcp", true);
         if (!url(m.get("url"), true) || !(tcp instanceof Boolean)
                 || !(m.getOrDefault("muted", true) instanceof Boolean)) throw bad("video");
@@ -111,8 +116,24 @@ final class CardSpec {
         if (!(cat instanceof String) || !((String) cat).matches("[a-z0-9_]{1,32}")) throw bad("category");
         if (title.trim().isEmpty() && message.trim().isEmpty() && !doc.containsKey("image") && !doc.containsKey("video"))
             throw new Api.Failure(400, "empty card");
-        image = doc.containsKey("image") ? image(doc.get("image")) : null;
-        video = doc.containsKey("video") ? video(doc.get("video")) : null;
+        Map<String, Object> stillImage = doc.containsKey("image") ? image(doc.get("image")) : null;
+        Map<String, Object> videoFields = doc.containsKey("video") ? object(doc.get("video"), "video") : null;
+        video = videoFields == null ? null : video(videoFields);
+        long timestamp = 0;
+        if (videoFields != null && videoFields.containsKey("preview")) {
+            Map<String, Object> preview = object(videoFields.get("preview"), "video");
+            Object stamp = preview.get("timestamp");
+            if (stillImage != null || preview.size() != 2 || !(stamp instanceof Number)
+                    || ((Number)stamp).doubleValue() != ((Number)stamp).longValue()
+                    || ((Number)stamp).longValue() <= 0 || ((Number)stamp).longValue() > 253402300799L)
+                throw bad("video");
+            timestamp = ((Number)stamp).longValue();
+            if (key(preview.get("key"))) stillImage = Json.fields("key", preview.get("key"));
+            else if (url(preview.get("url"), false)) stillImage = Json.fields("url", preview.get("url"));
+            else throw bad("video");
+        }
+        image = stillImage;
+        previewTimestamp = timestamp;
         buttons = buttons(doc.getOrDefault("buttons", java.util.Collections.emptyList()));
         Object p = doc.getOrDefault("priority", "normal");
         if (!(p instanceof String) || !((String) p).matches("low|normal|high|critical")) throw bad("priority");
@@ -137,6 +158,7 @@ final class CardSpec {
         message = source.message;
         from = source.from;
         priority = source.priority;
+        previewTimestamp = source.previewTimestamp;
         image = source.image;
         video = source.video;
         buttons = source.buttons;
