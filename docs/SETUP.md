@@ -1,6 +1,15 @@
 # Install and pair Herald
 
-Use an Android TV or Google TV device running Android 8.0 (API 26) or later, on a trusted LAN. The APK targets SDK 36. Download `herald-<version>.apk` and `herald-<version>.apk.sha256` from the [release page](https://github.com/iwinties/herald/releases) and check that `sha256sum herald-<version>.apk` prints the same digest, or run `tools/build.sh` in a checkout with Docker.
+Herald supports Android TV and Google TV running Android 8.0 or later. Use a trusted local network. Until Herald is available on Google Play, install the TV app from its signed GitHub release.
+
+### Sideload the TV app
+
+1. On the [official release page](https://github.com/iwinties/herald/releases/latest), open **Assets** and choose `herald-<version>.apk`. On the TV you can use a browser that supports downloads. Alternatively, download the APK on a computer, copy it to a USB drive, and open it with a file manager on a TV that supports USB storage.
+2. Open the APK. If Android asks for permission, choose **Settings** and allow the browser or file manager you used under **Install unknown apps**. Some TVs call this **Unknown sources**. Return to the APK and open it again.
+3. Select **Install** (or **Update** if Herald is already installed), then **Open**. You can turn off the installer’s permission once Herald is installed.
+4. In **Herald → Setup**, allow **Show cards over other apps**, select **Test card**, then **Start receiving**. If you use Home Assistant, install the matching integration in HACS or Marketplace and pair the TV.
+
+Prefer a computer and Android platform-tools? Follow [Install with ADB](#install-with-adb). To verify a downloaded APK on a computer, download the matching `.apk.sha256` from the same release and run `sha256sum -c herald-<version>.apk.sha256` in the download folder, substituting the version number. [Home Assistant installation and pairing](HOME_ASSISTANT.md#install)
 
 ### Set up with the remote
 
@@ -126,46 +135,3 @@ adb -s "$serial" uninstall co.tbrkr.herald
 ```
 
 To revoke wireless debugging trust on the TV, open **Wireless debugging → Paired devices**, select the computer and choose **Forget**.
-
-### 0.5.0 support matrix
-
-| Target | Coverage |
-|---|---|
-| Android TV settings | Native Android rendering and remote navigation checked at 1280×720 and 1920×1080 during development. |
-| Android build and Home Assistant | JVM, packaging and offline integration tests run for the release. Public results appear under [Herald CI](https://github.com/iwinties/herald/actions/workflows/ci.yml). |
-| Physical Google TV | See the [release notes](https://github.com/iwinties/herald/releases/tag/v0.5.0) for in-place installation and receiver checks after publication. |
-| Android TV emulator and Cast speakers | No release-specific emulator session or physical speaker playback check. |
-
-### 0.4.0 support matrix
-
-| Target | Coverage | Status |
-|---|---|---|
-| Android TV emulator | Fresh install, HTTPS, pairing, receiving across restarts, ntfy delivery and bundle-derived APK | Passed: 12 checks on the 0.4.0 build (emulator 37.3.10, android-36 TV image revision 4) |
-| Physical Android TV / Google TV | Removal of the old package, fresh setup, grants and pinned pairing | Passed on an onn 4K Pro (Android 14): the 0.3.0 package removed, 0.4.0 installed and set up, TLS 1.2 and 1.3 with matching digests, pinned pairing (2026-11-27) |
-| Home Assistant | Matching integration, removal of the old box entry and pairing the new installation | Offline suite passed (79 tests on the 0.4.0 build); live: old box entry deleted, the new installation paired with the fingerprint check, a card and a spoken announcement passed on Home Assistant 2026.10.1 |
-
-### 0.3.0 support matrix
-
-| Target | Coverage | Status |
-|---|---|---|
-| Android TV emulator | HTTPS, pairing, receiving across restarts, ntfy delivery and bundle-derived APK | Passed: 12 checks on the 0.3.0 build (emulator 37.3.10, android-36 TV image revision 4) |
-| Physical Android TV / Google TV | Upgrade, remote setup, grants, pairing and delivery | Partial: on an onn 4K Pro (Android 14) a fresh install, remote setup and grants, TLS 1.2 and 1.3 with matching digests, pinned pairing, Stop and Start receiving, a reboot and ntfy delivery with speech passed on the 0.3.0 build (2026-11-27); the upgrade over 0.2 is checked separately |
-| Home Assistant | Matching integration, certificate pinning and 0.2 entry migration | Offline suite passed (79 tests on the 0.3.0 build); a live pairing with the fingerprint check, a card and a spoken announcement passed on Home Assistant 2026.10.1 |
-
-### 0.2.0 support matrix
-
-| Target | Coverage | Status |
-|---|---|---|
-| Android 14, onn 4K Pro | Clean installation and physical display, remote and audio checks | Partial: 13 of 18 checks passed on the 0.2.0 build (2026-11-26); 5 skipped: TV-route audio from the TV app, two live Home Assistant checks, regressions and cleanup |
-| Android TV 16 | Emulator UI and unattended runner | Passed: 12 UI checks and 6 runner checks on the 0.2.0 build in the emulator |
-| Home Assistant | Paired box, spoken card, clip reuse and announcement with a card | Offline suite passed (67 tests on the 0.2.0 build); the live check was skipped |
-| Cast speakers | Offline integration tests | Offline tests pass; not yet tested on a real speaker |
-
-### 0.1.0 support matrix
-
-| Target | Planned coverage | Status |
-|---|---|---|
-| Android 14, onn 4K Pro | Physical device check | Passed: 46 checks on the 0.1.0 build (2026-11-26) |
-| Android TV 16 | Emulator only | Passed: six checks on the 0.1.0 build in the emulator |
-| Non-zero system-bar insets | Not device-verified | Not verified: the onn and the emulator both report zero insets |
-| Cast speakers | Offline tests only, not yet tested on a real speaker | Offline tests pass; not yet tested on a real speaker |

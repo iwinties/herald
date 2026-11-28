@@ -4,7 +4,7 @@
 
 Install Herald on both the TV and Home Assistant. Each TV box and the HA integration must run the same Herald version. This integration requires Home Assistant 2026.10 or newer.
 
-1. **On the TV** (Android TV or Google TV, Android 8 or newer), sideload the APK from the [Herald release](https://github.com/iwinties/herald/releases/latest). In **Herald → Setup**, allow cards over other apps, try **Test card**, then select **Start receiving**. [TV setup guide](SETUP.md)
+1. **On the TV** (Android TV or Google TV, Android 8 or newer), sideload the APK from the [Herald release](https://github.com/iwinties/herald/releases/latest). In **Herald → Setup**, allow cards over other apps, try **Test card**, then select **Start receiving**. [Step-by-step TV sideloading instructions](SETUP.md#sideload-the-tv-app)
 2. **In Home Assistant**, choose the instructions for your version below. Install the integration version that matches the TV APK, then restart Home Assistant.
 3. [Pair the box and send the first card](#add-a-box). You can [tell us which TV worked or where you got stuck](https://github.com/iwinties/herald/issues/1).
 

@@ -6,9 +6,9 @@ Herald shows notifications over the current app on Android TV and Google TV. A c
 
 ### Get started
 
-1. Install the APK from the [latest release](https://github.com/iwinties/herald/releases/latest). Open **Herald → Setup** with the remote, allow cards over other apps, try a test card and choose **Start receiving**. [TV setup and device support](docs/SETUP.md)
-2. Compare the certificate fingerprint on the TV, then enter the short-lived pairing code in your client. [First curl requests](examples/curl.md)
-3. Open Herald on the TV to choose appearance, sound and night behavior per category. [Card styles](docs/STYLES.md)
+1. **Install the TV app.** Download the APK from the [latest release](https://github.com/iwinties/herald/releases/latest) and follow the [sideloading instructions](docs/SETUP.md#sideload-the-tv-app). You can also [install with ADB](docs/SETUP.md#install-with-adb).
+2. **Start receiving.** In **Herald → Setup**, allow cards over other apps, try **Test card**, then select **Start receiving**.
+3. **Connect a sender.** For Home Assistant, [install the integration and pair your TV](docs/HOME_ASSISTANT.md#install). For your own scripts, start with the [first curl requests](examples/curl.md). When pairing, compare the fingerprint on the TV before entering the code.
 
 | Connect with | Guide |
 |---|---|
@@ -21,10 +21,4 @@ Herald shows notifications over the current app on Android TV and Google TV. A c
 
 Tried Herald? [Tell us which TV you used and how far you got](https://github.com/iwinties/herald/issues/1). You can also [report a bug or request a feature](https://github.com/iwinties/herald/issues/new/choose).
 
-### Build and test
-
-Run `tools/build.sh` with Docker to build the SDK image, run the JVM tests and package and sign `out/herald.apk`. Dependencies are pinned in `tools/deps.lock`; the APK build uses the prepared image offline. The default Docker command is `sudo docker`. Use `DOCKER=docker` for a user with Docker access. Set `HERALD_KEYS` to a private directory for your signing identity; the default is `~/.config/herald`. Updates require the same signing identity. Run `tests/ha/run.sh` for the offline Home Assistant suite.
-
-Maintainers follow [docs/RELEASING.md](docs/RELEASING.md): `tools/release.sh build` at a clean commit to create a versioned APK, its checksum, a separately signed Play AAB and a local release manifest in out/. Keep those files together. After checking that candidate, `publish` tags the recorded commit and attaches the same APK and checksum to a GitHub release; `verify` downloads the asset and checks its hash, certificate and remote tag. Publishing uses Git and the authenticated GitHub CLI. Pushes run CI. Installation on a device is manual.
-
-[0.5.0 changes and upgrade notes](CHANGELOG.md#050) · [Privacy policy](docs/PRIVACY.md) · [Apache License 2.0](LICENSE)
+[0.5.0 changes and upgrade notes](CHANGELOG.md#050) · [Build from source](CONTRIBUTING.md) · [Privacy policy](docs/PRIVACY.md) · [Apache License 2.0](LICENSE)
