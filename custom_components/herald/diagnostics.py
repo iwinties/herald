@@ -4,7 +4,7 @@ import re
 
 from homeassistant.components.diagnostics import async_redact_data
 
-PRIVATE = {"authorization", "token", "code", "password"}
+PRIVATE = {"authorization", "token", "code", "password", "username", "topic"}
 URL = re.compile(r"([A-Za-z][A-Za-z0-9+.-]*://)([^/\s?#]*)([^\s?#]*)(?:[?#][^\s]*)?")
 
 

@@ -27,7 +27,7 @@ Install Herald on both the TV and Home Assistant. Each TV box and the HA integra
 
 **Manual installation.** Copy the `custom_components/herald` folder from the matching release tag into `<config>/custom_components/`. The manifest should be at `<config>/custom_components/herald/manifest.json`. Restart Home Assistant.
 
-[Upgrade instructions for existing installations](../CHANGELOG.md#054).
+[Upgrade instructions for existing installations](../CHANGELOG.md#055).
 
 ### Add a box
 
@@ -195,7 +195,7 @@ action: herald.restore_settings
 data: {device_id: ["<box-device-id>"]}
 ```
 
-Select a snapshot by its ISO timestamp in the optional snapshot field, or omit it to use the newest. HA fetches settings on setup and settings.changed. It keeps the last three distinct snapshots per box, moving a repeated snapshot to newest with its original ID. Restore omits read-only fields and preserves the stored broker password. Diagnostics redact credentials and strip URL user info, queries and fragments.
+Select a snapshot by its ISO timestamp in the optional snapshot field, or omit it to use the newest. HA fetches settings on setup and settings.changed. It keeps the last three distinct snapshots per box, moving a repeated snapshot to newest with its original ID. Restore omits read-only fields and preserves the stored broker password. Diagnostics redact credentials, including MQTT usernames and ntfy topic names, and strip URL user info, queries and fragments.
 
 ### Events
 

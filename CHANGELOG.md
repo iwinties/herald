@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.5
+
+- Home Assistant diagnostics now redact MQTT usernames and ntfy topic names from status and saved settings snapshots. Update Herald in HACS, restart Home Assistant, and generate a fresh diagnostics file before sharing it. Older downloads may still contain those values.
+- If you publicly shared an older download containing a private ntfy topic on a public server, switch to a new topic in Herald and in each sender that publishes to it.
+- For TVs running 0.4.0 or later, install the signed APK over the existing app to retain settings and pairings.
+
 ## 0.5.4
 
 - **Camera previews.** Show a recent timestamped snapshot while live video connects. Home Assistant can use a cached camera with `video.preview_camera`. The first live frame replaces the still. [Set up a doorbell camera](examples/home-assistant.md#show-the-porch-camera-when-the-doorbell-rings).

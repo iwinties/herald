@@ -23,4 +23,4 @@ Herald shows notifications over the app you’re watching on Android TV or Googl
 
 Tried Herald? [Tell us which TV you used and how far you got](https://github.com/iwinties/herald/issues/1). You can also [report a bug or request a feature](https://github.com/iwinties/herald/issues/new/choose).
 
-[0.5.4 changes and upgrade notes](CHANGELOG.md#054) · [Build from source](CONTRIBUTING.md) · [Privacy policy](docs/PRIVACY.md) · [Apache License 2.0](LICENSE)
+[0.5.5 changes and upgrade notes](CHANGELOG.md#055) · [Build from source](CONTRIBUTING.md) · [Privacy policy](docs/PRIVACY.md) · [Apache License 2.0](LICENSE)

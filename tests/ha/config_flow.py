@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 from fake_herald import FakeHerald, begin, run, step, until
 from homeassistant import loader
+from homeassistant.components.diagnostics import REDACTED
 from homeassistant.helpers import issue_registry
 from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 
@@ -238,7 +239,8 @@ async def exercise(hass, a, b, root):
         await migration_checks(hass, entry, b, await extra_box(plain=True))
         data = {
             "video": "rtsp://user:SENTINEL-PASS@h/x",
-            "mqtt": {"password": "SENTINEL-MQTT"},
+            "mqtt": {"password": "SENTINEL-MQTT", "UserName": "fixture-current-user", "enabled": True},
+            "ntfy": {"topics": [{"Topic": "fixture-current-topic", "category": "general"}]},
         }
         entry.runtime_data.data.update(data)
         b.next["POST", "cards"] = (400, {"ok": False, "error": data["video"]})
@@ -263,7 +265,25 @@ async def exercise(hass, a, b, root):
             public_error = str(exc)
         else:
             raise AssertionError("expected a transport exception")
-        diagnostic = json.dumps(await async_get_config_entry_diagnostics(hass, entry))
+        snapshot_settings = {
+            "mqtt": {"username": "fixture-saved-user", "port": 1883},
+            "ntfy": {"topics": [{"topic": "fixture-first-topic"}, {"topic": "fixture-second-topic"}]},
+        }
+        entry.runtime_data.snapshots.append({"id": "fixture-snapshot", "settings": snapshot_settings})
+        report = await async_get_config_entry_diagnostics(hass, entry)
+        diagnostic = json.dumps(report)
+        for value in ("fixture-current-user", "fixture-saved-user", "fixture-current-topic",
+                      "fixture-first-topic", "fixture-second-topic"):
+            assert value not in diagnostic
+        assert report["status"]["mqtt"] == {"password": REDACTED, "username": REDACTED, "enabled": True}
+        assert report["status"]["ntfy"]["topics"] == [{"topic": REDACTED, "category": "general"}]
+        saved = report["snapshots"][-1]["settings"]
+        assert saved["ntfy"]["topics"] == [{"topic": REDACTED}, {"topic": REDACTED}]
+        assert saved["mqtt"] == {"username": REDACTED, "port": 1883}
+        original = entry.runtime_data.snapshots[-1]["settings"]
+        assert original["ntfy"]["topics"][0]["topic"] == "fixture-first-topic"
+        assert original["mqtt"]["username"] == "fixture-saved-user"
+        print("PASS diagnostics redact MQTT usernames and ntfy topics in status and saved snapshots")
         assert "rtsp://h/x" in diagnostic and b.cert_sha256 in diagnostic
         for sentinel in (a.token, "SENTINEL-MQTT", "SENTINEL-PASS", b.code):
             assert (
