@@ -1,5 +1,18 @@
 # Herald for Home Assistant
 
+After pairing, try the [everyday examples](../examples/home-assistant.md) for a doorbell camera, a dinner announcement, a recorded voice note and a garage status chip.
+
+### What the integration provides
+
+| In Home Assistant | What you can do |
+|---|---|
+| TV cards and status chips | Send a plain notification with the box’s notify entity, show a snapshot or live camera, display a remote-selectable button, or keep a status chip on screen until cleared. Save and delete custom Looks. |
+| Announcements and sounds | Speak text, play a recording or a sound, or show and speak a card together. Target individual TVs and Cast speakers. Set a shared TTS voice and per-speaker volume and quiet hours. |
+| Events and device status | Trigger an automation from a remote button press or dismissal. See screen state, audio activity, overlay permission, quiet seconds, last card and last audio for each box. |
+| Settings and recovery | Stop box playback and its queue, restore one of the last three distinct settings snapshots, or re-pair a box when its credentials change. |
+
+For dashboard use, the [one-tap announcement button](../examples/home-assistant.md#call-everyone-to-dinner-from-a-dashboard) works with the standard Home Assistant dashboard. The integration also accepts [recorded voice notes](../examples/home-assistant.md#play-a-recorded-voice-note). A microphone recorder is a separate frontend component.
+
 ### Install
 
 Install Herald on both the TV and Home Assistant. Each TV box and the HA integration must run the same Herald version. This integration requires Home Assistant 2026.10 or newer.
@@ -14,7 +27,7 @@ Install Herald on both the TV and Home Assistant. Each TV box and the HA integra
 
 **Manual installation.** Copy the `custom_components/herald` folder from the matching release tag into `<config>/custom_components/`. The manifest should be at `<config>/custom_components/herald/manifest.json`. Restart Home Assistant.
 
-**Updating from 0.4.0?** Install 0.5.0 over the existing TV app on each box, update Herald in HACS or Marketplace, then restart Home Assistant. Keep the existing box entries and pairings. If a TV is on 0.3.0 or earlier, follow the [package migration](../CHANGELOG.md#040) before pairing it again.
+**Updating from 0.4.0 or 0.5.0?** Install 0.5.1 over the existing TV app on each box, update Herald in HACS or Marketplace, then restart Home Assistant. Keep the existing box entries and pairings. If a TV is on 0.3.0 or earlier, follow the [package migration](../CHANGELOG.md#040) before pairing it again.
 
 ### Add a box
 

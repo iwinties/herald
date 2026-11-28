@@ -15,10 +15,10 @@ Herald shows notifications over the current app on Android TV and Google TV. A c
 | Local HTTPS clients | [Routes, bounds and event stream](docs/API.md) |
 | ntfy subscribers | [Topics, credentials and per-topic speech](docs/NTFY.md) |
 | MQTT clients or HA MQTT discovery | [Topics and broker setup](docs/MQTT.md) |
-| Home Assistant, including Cast speakers | [Install with Marketplace or HACS, pair a TV and send a card](docs/HOME_ASSISTANT.md) · [REST command examples](examples/ha-rest-command.yaml) |
+| Home Assistant, including Cast speakers | [Install and pair](docs/HOME_ASSISTANT.md#install) · [Integration features](docs/HOME_ASSISTANT.md#what-the-integration-provides) · [Dashboard and automation examples](examples/home-assistant.md) · [REST commands](examples/ha-rest-command.yaml) |
 | Box voice, Piper and other Home Assistant voices | [Voice setup and caching](docs/VOICE.md) |
 | TvOverlay senders and migrating Android TV notifications | [Compatibility](docs/COMPAT.md) |
 
 Tried Herald? [Tell us which TV you used and how far you got](https://github.com/iwinties/herald/issues/1). You can also [report a bug or request a feature](https://github.com/iwinties/herald/issues/new/choose).
 
-[0.5.0 changes and upgrade notes](CHANGELOG.md#050) · [Build from source](CONTRIBUTING.md) · [Privacy policy](docs/PRIVACY.md) · [Apache License 2.0](LICENSE)
+[0.5.1 changes and upgrade notes](CHANGELOG.md#051) · [Build from source](CONTRIBUTING.md) · [Privacy policy](docs/PRIVACY.md) · [Apache License 2.0](LICENSE)

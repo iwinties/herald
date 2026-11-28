@@ -71,7 +71,7 @@ import java.util.concurrent.TimeUnit;
  */
 public class HeraldService extends Service implements Backend {
     static final String TAG = "Herald";
-    static final String VERSION = "0.5.0";
+    static final String VERSION = "0.5.1";
     /** Name prefix of a voice note's temporary file in getCacheDir(). */
     static final String VOICE_PREFIX = "voice-";
     static final int RATE = 22050;

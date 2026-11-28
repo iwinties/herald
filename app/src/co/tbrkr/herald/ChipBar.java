@@ -53,7 +53,8 @@ final class ChipBar extends LinearLayout {
 
     private static final class Slot extends FrameLayout {
         final LinearLayout content;
-        final int shadow, offset, shadowColor, glow, glowColor;
+        final DropShadow shadow;
+        final int glow, glowColor;
         final int[] edges;
         final boolean steadyGlow;
         final float smallCorner;
@@ -71,11 +72,8 @@ final class ChipBar extends LinearLayout {
             steadyGlow = resolvedGlow != null;
             glowColor = (Color.parseColor(steadyGlow ? resolvedGlow : color) & 0xffffff) | 0x59000000;
             glow = Math.round(.006f * h);
-            boolean strong = "strong".equals(style.get("shadow"));
-            shadow = Math.round(h * (strong ? .016f : "soft".equals(style.get("shadow")) ? .008f : 0f));
-            shadowColor = strong ? 0x8C000000 : 0x59000000;
-            offset = shadow == 0 ? 0 : Math.round(.004f * h);
-            edges = CardFrame.insets(shadow, offset, steadyGlow || started >= 0 ? glow : 0);
+            shadow = new DropShadow((String) style.get("shadow"), h);
+            edges = CardFrame.insets(shadow.reach, shadow.offset, steadyGlow || started >= 0 ? glow : 0);
             smallCorner = "none".equals(style.get("corner")) ? .012f * h : 0;
 
             int size = Math.max(1, Math.round(.022f * h));
@@ -129,11 +127,11 @@ final class ChipBar extends LinearLayout {
             float left = content.getLeft() - dx, right = content.getRight() + dx;
             float top = content.getTop() - dy, bottom = content.getBottom() + dy;
             float radius = smallCorner > 0 ? smallCorner * scale : (bottom - top) / 2;
-            if (shadow > 0) {
-                paint.setColor(shadowColor);
-                canvas.drawRoundRect(left-shadow, top-shadow+offset, right+shadow, bottom+shadow+offset,
-                        radius+shadow, radius+shadow, paint);
-            }
+            int shadowSave = canvas.save();
+            canvas.scale(scale, scale, (left+right)/2, (top+bottom)/2);
+            shadow.draw(canvas, content.getLeft(), content.getTop(), content.getWidth(), content.getHeight(),
+                    smallCorner > 0 ? smallCorner : content.getHeight() / 2f);
+            canvas.restoreToCount(shadowSave);
             if (steadyGlow || pulse) {
                 paint.setColor(glowColor);
                 canvas.drawRoundRect(left-glow, top-glow, right+glow, bottom+glow, radius+glow, radius+glow, paint);

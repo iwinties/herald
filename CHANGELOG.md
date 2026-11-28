@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.1
+
+- Cards and status chips cast a soft shadow that follows their rounded corners. The existing Soft and Strong settings control its depth, and the shadow leaves translucent cards and camera video clear.
+- Interactive cards show the remote’s Back button as a small keycap beside “to close.”
+- Try four [Home Assistant examples](examples/home-assistant.md) for a doorbell camera, a dinner announcement, recorded voice playback and a garage status chip.
+- **Upgrading from 0.5.0:** Install the APK over Herald on each TV, update the integration in HACS or Marketplace, then restart Home Assistant. Existing settings and pairings carry over.
+
 ## 0.5.0
 
 - Preview a Look at its actual screen position. Press OK on its thumbnail for a full-size preview, then press OK or Back to return. Each settings screen remembers its own **More options** choice. MQTT, ntfy and TvOverlay are together under **Integrations**. The new megaphone icon identifies Herald on the TV and in Home Assistant.

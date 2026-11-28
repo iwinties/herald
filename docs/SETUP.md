@@ -52,7 +52,7 @@ tools/install-adb.sh '<box>:<connection-port>' --start-receiving --port 8080
 ```bash
 set -eo pipefail
 serial=192.0.2.10:5555
-version=0.5.0
+version=0.5.1
 apk="herald-$version.apk"
 (cd out && sha256sum -c "$apk.sha256")
 tools/adb.sh start
@@ -76,7 +76,7 @@ The container sees the host’s `out/herald-<version>.apk` as `/apk/herald-<vers
 set -eo pipefail
 serial=192.0.2.10:5555
 adb connect "$serial"
-adb -s "$serial" install -r herald-0.5.0.apk
+adb -s "$serial" install -r herald-0.5.1.apk
 adb -s "$serial" shell appops set co.tbrkr.herald SYSTEM_ALERT_WINDOW allow
 adb -s "$serial" shell dumpsys deviceidle whitelist +co.tbrkr.herald
 adb -s "$serial" shell am start -W -n co.tbrkr.herald/.SettingsActivity
@@ -90,7 +90,7 @@ After `result=-1`, verify that the listener actually started. In the [API guide]
 
 ```bash
 curl -q --noproxy '*' --insecure --pinnedpubkey "sha256//${pin:?verified pin required}" -fsS "$box/v1/info" |
-  jq -e '.app == "herald" and .api == 2 and .version == "0.5.0"'
+  jq -e '.app == "herald" and .api == 2 and .version == "0.5.1"'
 ```
 
 For USB, use your connected serial and omit `adb connect`. Before the API guide’s bootstrap, run `adb -s "$serial" forward tcp:0 tcp:7979` and use `127.0.0.1:<returned-port>` as the address. After the pinned check, remove the forward with `adb -s "$serial" forward --remove tcp:<returned-port>`, substituting the actual port.

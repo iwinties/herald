@@ -4,10 +4,10 @@ import android.content.Context;
 import android.content.res.ColorStateList;
 import android.graphics.Bitmap;
 import android.graphics.Color;
+import android.graphics.Canvas;
+import android.graphics.Paint;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
-import android.graphics.drawable.Drawable;
-import android.graphics.drawable.LayerDrawable;
 import android.graphics.drawable.StateListDrawable;
 import android.text.SpannableStringBuilder;
 import android.text.Spanned;
@@ -23,7 +23,6 @@ import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
-import java.util.ArrayList;
 import java.util.Locale;
 import java.util.Map;
 
@@ -34,7 +33,8 @@ final class CardView extends FrameLayout {
     int width;
     final TextureView videoTexture;
     private final FrameLayout still;
-    private final TextView caption, hint;
+    private final TextView caption, pauseHint;
+    private final View backHint;
     private final LinearLayout buttons, copy, column;
     private int selected;
     private boolean canSelect;
@@ -53,8 +53,7 @@ final class CardView extends FrameLayout {
     private final GradientDrawable stroke = new GradientDrawable();
     private final String corner;
     private final int textColor;
-    private final ArrayList<GradientDrawable> halos = new ArrayList<>();
-    private final ArrayList<Integer> spreads = new ArrayList<>();
+    private float frameRadius;
 
     CardView(Context context, CardBoard.Entry e, int sw, int sh, String categoryName, ImageStore images, Runnable imageShown) {
         super(context);
@@ -80,28 +79,25 @@ final class CardView extends FrameLayout {
         String borderStyle = (String) s.get("border");
         int border = "none".equals(borderStyle) ? 0 : Math.max(1, Math.round(sh *
                 ("thin".equals(borderStyle) ? .001f : "medium".equals(borderStyle) ? .002f : .0035f)));
-        int spread = Math.round(sh * ("soft".equals(s.get("shadow")) ? .008f
-                : "strong".equals(s.get("shadow")) ? .016f : 0f));
-        int offset = spread == 0 ? 0 : Math.round(.004f * sh);
+        DropShadow shadow = new DropShadow((String) s.get("shadow"), sh);
         int glow = "none".equals(s.get("glow")) ? 0 : Math.round(.006f * sh);
-        insets = CardFrame.insets(spread, offset, glow);
-        decoration = new View(context);
-        if (spread > 0) addHalo(spread, "strong".equals(s.get("shadow")) ? 0x8C000000 : 0x59000000);
-        if (glow > 0) {
-            int glowColor = "border".equals(s.get("glow")) ? color(s, "border_color") : accent;
-            addHalo(glow, 0x59000000 | (glowColor & 0xffffff));
-        }
-        if (!halos.isEmpty()) {
-            LayerDrawable layers = new LayerDrawable(halos.toArray(new Drawable[0]));
-            layers.setPaddingMode(LayerDrawable.PADDING_MODE_STACK);
-            for (int i = 0; i < halos.size(); i++) {
-                int radius = spreads.get(i);
-                int dy = i == 0 && spread > 0 ? offset : 0;
-                layers.setLayerInset(i, insets[0] - radius, insets[1] - radius + dy,
-                        insets[2] - radius, insets[3] - radius - dy);
+        int glowColor = "border".equals(s.get("glow")) ? color(s, "border_color") : accent;
+        insets = CardFrame.insets(shadow.reach, shadow.offset, glow);
+        decoration = new View(context) {
+            private final Paint glowPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+
+            @Override protected void onDraw(Canvas canvas) {
+                if (full) return;
+                int left = insets[0], top = insets[1];
+                int right = getWidth() - insets[2], bottom = getHeight() - insets[3];
+                shadow.draw(canvas, left, top, right - left, bottom - top, frameRadius);
+                if (glow > 0) {
+                    glowPaint.setColor(0x59000000 | (glowColor & 0xffffff));
+                    canvas.drawRoundRect(left - glow, top - glow, right + glow, bottom + glow,
+                            frameRadius + glow, frameRadius + glow, glowPaint);
+                }
             }
-            decoration.setBackground(layers);
-        }
+        };
         if (!"text".equals(layout)) {
             shape.setColor(bg);
             if (border > 0) {
@@ -203,7 +199,6 @@ final class CardView extends FrameLayout {
         // Keep status in the text area so fullscreen copy cannot cover it.
         copy.addView(caption);
         buttons = new LinearLayout(context);
-        hint = label("", body * .8f, false);
         if (!spec.buttons.isEmpty()) {
             String spacing = (String) s.get("button_spacing");
             int gap = Math.max(2, Math.round(pad * ("compact".equals(spacing) ? .35f :
@@ -233,8 +228,15 @@ final class CardView extends FrameLayout {
             copy.addView(buttons, row);
             LinearLayout.LayoutParams hintParams = new LinearLayout.LayoutParams(-1, -2);
             hintParams.topMargin = gap;
-            hint.setVisibility(GONE);
-            copy.addView(hint, hintParams);
+            backHint = makeBackHint(body, pad);
+            backHint.setVisibility(GONE);
+            copy.addView(backHint, hintParams);
+            pauseHint = label("Pause to use buttons", body * .8f, false);
+            pauseHint.setVisibility(GONE);
+            copy.addView(pauseHint, new LinearLayout.LayoutParams(hintParams));
+        } else {
+            backHint = null;
+            pauseHint = null;
         }
         media.setVisibility(spec.video == null ? GONE : VISIBLE);
         if (full) {
@@ -261,6 +263,31 @@ final class CardView extends FrameLayout {
                 MeasureSpec.makeMeasureSpec(getMeasuredHeight(), MeasureSpec.EXACTLY));
     }
 
+    private View makeBackHint(float body, int pad) {
+        LinearLayout hint = new LinearLayout(getContext());
+        hint.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
+        hint.setContentDescription("Back to close");
+        hint.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);
+        TextView key = label("Back", body * .72f, true);
+        key.setIncludeFontPadding(false);
+        GradientDrawable outline = new GradientDrawable();
+        outline.setColor(Color.TRANSPARENT);
+        outline.setStroke(Math.max(1, Math.round(screenHeight * .001f)), (textColor & 0x00ffffff) | 0x99000000);
+        outline.setCornerRadius(pad * .24f);
+        key.setBackground(outline);
+        key.setPaddingRelative(pad / 3, 1, pad / 3, 1);
+        key.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        hint.addView(key);
+        TextView action = label("to close", body * .72f, false);
+        action.setIncludeFontPadding(false);
+        action.setAlpha(.8f);
+        action.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-2, -2);
+        params.setMarginStart(Math.max(2, pad / 3));
+        hint.addView(action, params);
+        return hint;
+    }
+
     private static int color(Map<String, Object> fields, String key) {
         return Color.parseColor((String) fields.get(key));
     }
@@ -284,23 +311,17 @@ final class CardView extends FrameLayout {
         return background;
     }
 
-    private void addHalo(int spread, int color) {
-        GradientDrawable halo = new GradientDrawable();
-        halo.setColor(color);
-        halos.add(halo);
-        spreads.add(spread);
-    }
-
     @Override protected void onSizeChanged(int w, int h, int oldW, int oldH) {
         super.onSizeChanged(w, h, oldW, oldH);
         float radius = full ? 0 : "pill".equals(corner) ? h / 2f
                 : Math.round(screenHeight * ("small".equals(corner) ? .012f : "medium".equals(corner) ? .02f
                         : "large".equals(corner) ? .03f : 0f));
         setFrameRadius(radius);
-        for (int i = 0; i < halos.size(); i++) halos.get(i).setCornerRadius(radius + spreads.get(i));
     }
 
     private void setFrameRadius(float radius) {
+        frameRadius = radius;
+        decoration.invalidate();
         shape.setCornerRadius(radius);
         stroke.setCornerRadius(radius);
         invalidateOutline();
@@ -330,9 +351,8 @@ final class CardView extends FrameLayout {
     void buttonFocus(boolean owner, boolean paused) {
         if (spec.buttons.isEmpty()) return;
         canSelect = owner;
-        String text = paused ? "Pause to use buttons" : owner ? "BACK to close" : "";
-        if (!text.contentEquals(hint.getText())) hint.setText(text);
-        hint.setVisibility(text.isEmpty() ? GONE : VISIBLE);
+        backHint.setVisibility(owner && !paused ? VISIBLE : GONE);
+        pauseHint.setVisibility(paused ? VISIBLE : GONE);
         buttons.setAlpha(paused ? .5f : 1f);
         highlight();
     }
