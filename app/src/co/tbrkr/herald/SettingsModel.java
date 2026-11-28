@@ -23,8 +23,8 @@ final class SettingsModel {
             case "pixel_shift": return "Pixel shift";
             case "sticky_cap": return "Maximum sticky duration";
             case "focus_while_playing": return "Allow button focus during playback";
-            case "volume_tv": return "TV volume";
-            case "volume_speaker": return "Box speaker volume";
+            case "volume_tv": return "Announcement volume (TV)";
+            case "volume_speaker": return "Announcement volume (box speaker)";
             case "allowed": return "Allow pairing";
             case "speaker_at_night": return "Speaker at night";
             case "chip_placement": return "Chip position";

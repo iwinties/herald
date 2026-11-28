@@ -2,7 +2,7 @@
 
 ## Use the box voice
 
-Herald can speak with Android's installed text-to-speech engine without any Home Assistant voice setup. Open **Sound & voice** on the TV and select **Voice test (TV)** for HDMI or **Voice test (box speaker)** for the built-in speaker. If the selected route is absent, the test reports `output not available`. Ordinary announcements default to `auto`, which selects TV when available and otherwise the box speaker. Night hours can restrict the box speaker.
+Herald can speak with Android's installed text-to-speech engine without any Home Assistant voice setup. Open **Sound & voice → More options** on the TV and select **Voice test (TV)** for HDMI or **Voice test (box speaker)** for the built-in speaker. If the selected route is absent, the test reports `output not available`. Ordinary announcements default to `auto`, which selects TV when available and otherwise the box speaker. Night hours can restrict the box speaker.
 
 To hear a card, send `announce: true` with a title or message. A category can also enable announcements for its own cards. To use one voice across multiple boxes and Cast speakers, configure a TTS entity in Home Assistant.
 

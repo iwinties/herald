@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, patch
 
 from fake_herald import action, pair, run, until
 from homeassistant.exceptions import ServiceValidationError
+from homeassistant.helpers import entity_registry as er
 
 
 async def exercise(hass, a, b, root):
@@ -477,6 +478,36 @@ async def exercise(hass, a, b, root):
     )
     print(
         "PASS a spoken show_card to a box without announce support is reported unsupported"
+    )
+
+    entity = er.async_get(hass).async_get_entity_id(
+        "notify", "herald", f"{x.entry.unique_id}_notify"
+    )
+    result = await action(hass, "stop", entity_id=entity, device_id=[x.device_id])
+    assert list(result) == [x.device_id]
+    try:
+        await action(hass, "stop", entity_id="notify.unrelated")
+        raise AssertionError("Unknown notification target accepted")
+    except ServiceValidationError:
+        pass
+
+    async def stop_without_response(ids):
+        await hass.services.async_call(
+            "herald", "stop", {"device_id": ids}, blocking=True
+        )
+
+    a.next["POST", "stop"] = (409, {"error": "output not available"})
+    try:
+        await stop_without_response([x.device_id])
+        raise AssertionError("Failed dashboard action returned success")
+    except ServiceValidationError as exc:
+        assert x.entry.title in str(exc) and "output not available" in str(exc)
+    a.next["POST", "stop"] = (409, {"error": "output not available"})
+    with patch("custom_components.herald.services._LOGGER.warning") as warning:
+        await stop_without_response([x.device_id, y.device_id])
+        warning.assert_called_once()
+    print(
+        "PASS notify entity targeting, dashboard failure and partial delivery feedback"
     )
 
     a.settings["ntfy"] = {"token": a.token, "token_set": True, "topics": []}

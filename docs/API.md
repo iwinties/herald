@@ -50,7 +50,7 @@ Card, button, chip and request IDs and image keys match `^[A-Za-z0-9_-][A-Za-z0-
 
 The box generates its UUID at first start. Discovery names can change. Pairing uses a six-digit on-screen code valid for 120 seconds. One code may be active at a time. Cancelling it or entering a fifth wrong code starts a 60-second lockout. Restarting the service discards the code. A successful pairing removes it and displays the client name for five seconds.
 
-A network-started code appears in its own non-focusable overlay and binds to the trimmed client name. A code started under **Pairing & clients → Pair a new client** takes its client name at finish. A TV-started code stays valid until it times out, also after you leave the pairing screen, and shows again when you come back. The code stays out of card history, events, backups and MQTT. Save the token returned at finish on the client. The box stores its SHA-256 digest, name and timestamps. Tokens contain 32 random bytes encoded as unpadded base64url. Up to 16 clients may pair; use the TV to remove a named client.
+A network-started code appears in its own non-focusable overlay and binds to the trimmed client name. A code started under **Pairing & clients → Pair an app or script** takes its client name at finish. A TV-started code stays valid until it times out, also after you leave the pairing screen, and shows again when you come back. The code stays out of card history, events, backups and MQTT. Save the token returned at finish on the client. The box stores its SHA-256 digest, name and timestamps. Tokens contain 32 random bytes encoded as unpadded base64url. Up to 16 clients may pair; use the TV to remove a named client.
 
 ### `GET /v1/info`
 

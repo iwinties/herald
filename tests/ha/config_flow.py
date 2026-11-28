@@ -68,6 +68,7 @@ async def exercise(hass, a, b, root):
         print("PASS zeroconf needs TXT api 2")
         flow = await discover(b)
         assert flow["step_id"] == "confirm"
+        assert flow["description_placeholders"] == {"name": b.name, "host": "127.0.0.1"}
         flow = await step(hass, flow, {})
         assert flow["step_id"] == "code"
         flow = await step(hass, flow, {"code": b.code})
@@ -155,6 +156,8 @@ async def exercise(hass, a, b, root):
         print("PASS pairing sends the code only over the pinned connection")
         for message, expected in [
             ("screen off", "screen_off"),
+            ("overlay not allowed", "overlay_required"),
+            ("try later", "pairing_locked"),
             ("pairing disabled", "pairing_disabled"),
             ("too many clients", "too_many_clients"),
         ]:
@@ -162,6 +165,17 @@ async def exercise(hass, a, b, root):
             flow = await begin(hass, "127.0.0.1", a.port)
             assert flow["errors"]["base"] == expected
             hass.config_entries.flow.async_abort(flow["flow_id"])
+        a.next["POST", "pair/start"] = (
+            409,
+            {"ok": False, "error": "pairing in progress"},
+        )
+        existing = await begin(hass, "127.0.0.1", a.port)
+        assert (
+            existing["step_id"] == "code"
+            and existing["errors"]["base"] == "existing_code"
+        )
+        assert "fingerprint" in existing["description_placeholders"]
+        hass.config_entries.flow.async_abort(existing["flow_id"])
         flow = await begin(hass, "127.0.0.1", a.port)
         assert (await step(hass, flow, {"code": "invalid"}))["errors"][
             "base"

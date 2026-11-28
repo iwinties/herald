@@ -9,14 +9,16 @@
         }
       },
       "box": {
-        "title": "Box address",
+        "title": "Connect a TV",
         "data": {
           "host": "Host",
           "port": "Port"
-        }
+        },
+        "description": "Use the address shown in Herald → Setup. Enter the host and port separately."
       },
       "confirm": {
-        "title": "Pair this Herald box"
+        "title": "Pair {name}",
+        "description": "Wake the TV at {host}. Continue to display its six-digit pairing code."
       },
       "code": {
         "title": "Enter the code shown on the TV",
@@ -32,7 +34,10 @@
       "pairing_disabled": "Pairing is disabled",
       "too_many_clients": "The client list is full",
       "expired": "The code expired",
-      "cannot_connect": "Cannot connect to Herald"
+      "cannot_connect": "Cannot connect to Herald",
+      "existing_code": "A code is already on the TV. Use it if you started pairing on the TV or from Home Assistant. If another app requested it, wait two minutes and restart pairing.",
+      "overlay_required": "On the TV, open Herald → Setup and allow Show cards over other apps.",
+      "pairing_locked": "Pairing is temporarily locked. Try again in one minute."
     },
     "abort": {
       "wrong_device": "This is not the paired box",
@@ -40,7 +45,8 @@
       "unsupported_box": "This box needs Herald API 2 and a valid certificate fingerprint.",
       "invalid_discovery": "Invalid discovery",
       "reauth_successful": "Pairing renewed"
-    }
+    },
+    "flow_title": "{name} ({host})"
   },
   "options": {
     "step": {

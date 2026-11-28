@@ -13,6 +13,8 @@ from .const import DOMAIN, PORT, SPEAKERS
 def form_error(exc):
     return {
         "screen off": "screen_off",
+        "overlay not allowed": "overlay_required",
+        "try later": "pairing_locked",
         "pairing disabled": "pairing_disabled",
         "too many clients": "too_many_clients",
         "wrong code": "wrong_code",
@@ -81,7 +83,14 @@ class HeraldFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     data={"entry_id": entry.entry_id, **self.address},
                 )
             return self.async_abort(reason="already_configured")
+        self.pair_title(discovery_info.name.removesuffix("." + discovery_info.type))
         return await self.async_step_confirm()
+
+    def pair_title(self, name):
+        self.context["title_placeholders"] = {
+            "name": name,
+            "host": self.address["host"],
+        }
 
     async def async_step_confirm(self, user_input=None):
         errors = {}
@@ -91,13 +100,17 @@ class HeraldFlow(config_entries.ConfigFlow, domain=DOMAIN):
             except ApiError as exc:
                 errors["base"] = form_error(exc)
         return self.async_show_form(
-            step_id="confirm", data_schema=vol.Schema({}), errors=errors
+            step_id="confirm",
+            data_schema=vol.Schema({}),
+            errors=errors,
+            description_placeholders=self.context["title_placeholders"],
         )
 
     async def async_step_reauth(self, entry_data):
         entry = self._get_reauth_entry()
         await self.async_set_unique_id(entry.unique_id)
         self.address = {k: entry_data[k] for k in ("host", "port")}
+        self.pair_title(entry.title)
         return await self.async_step_confirm()
 
     async def begin_pair(self):
@@ -120,11 +133,18 @@ class HeraldFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if self.source != config_entries.SOURCE_REAUTH:
             self._abort_if_unique_id_configured()
         self.box_name = info["name"]
-        await self.client.request("POST", "pair/start", {"client": "Home Assistant"})
+        try:
+            await self.client.request(
+                "POST", "pair/start", {"client": "Home Assistant"}
+            )
+        except ApiError as exc:
+            if (exc.status, exc.error) != (409, "pairing in progress"):
+                raise
+            return await self.async_step_code(existing=True)
         return await self.async_step_code()
 
-    async def async_step_code(self, user_input=None):
-        errors = {}
+    async def async_step_code(self, user_input=None, *, existing=False):
+        errors = {"base": "existing_code"} if existing else {}
         if user_input is not None:
             try:
                 reply = await self.client.request(

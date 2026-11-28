@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.2
+
+- Setup shows the TV address and the next pairing step. Home Assistant identifies discovered TVs by name and address, explains pairing refusals and accepts a code started on the TV after you compare the fingerprint.
+- Pick TVs by notification entity or device in Home Assistant. Actions offer clearer labels, common choices and feedback when delivery fails.
+- On TV, color settings show swatches. Removing a paired client, deleting a Look or category, and resetting a category now ask for confirmation.
+- Try the [remote-button reminder](examples/home-assistant.md#mark-a-reminder-done-from-the-tv-remote) to let someone mark laundry collected without leaving the TV.
+- **Upgrade from 0.4.0 or later:** Install the signed APK over the existing TV app, update Herald to the same version in HACS or Marketplace, then restart Home Assistant. Your settings and pairings carry over. For an earlier TV installation, follow the [package migration](#040).
+
 ## 0.5.1
 
 - Cards and status chips cast a soft shadow that follows their rounded corners. The existing Soft and Strong settings control its depth, and the shadow leaves translucent cards and camera video clear.

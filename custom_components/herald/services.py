@@ -3,6 +3,7 @@
 import asyncio
 import base64
 import json
+import logging
 import re
 from hashlib import sha1, sha256
 from pathlib import Path
@@ -13,6 +14,7 @@ from homeassistant.components import camera, media_source, tts
 from homeassistant.core import SupportsResponse
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.network import get_url
 from homeassistant.helpers.service import async_set_service_schema
@@ -21,7 +23,11 @@ from .client import SAFE_ERRORS, ApiError
 from .const import DOMAIN, MAX_CLIP, MAX_IMAGE
 
 KEY = vol.Match(r"^[A-Za-z0-9_-][A-Za-z0-9_.-]{0,63}\Z")
-TARGET = {vol.Optional("device_id"): vol.All(cv.ensure_list, [str])}
+TARGET = {
+    vol.Optional("device_id"): vol.All(cv.ensure_list, [str]),
+    vol.Optional("entity_id"): vol.All(cv.ensure_list, [cv.entity_id]),
+}
+_LOGGER = logging.getLogger(__name__)
 AUDIO = {
     "speakers": vol.All(cv.ensure_list, [cv.entity_id]),
     "request_id": KEY,
@@ -451,13 +457,24 @@ def update_snapshots(hass):
         "restore_settings",
         {
             "name": "Restore settings",
+            "description": "Apply a saved settings snapshot to the selected TVs.",
             "fields": {
+                "entity_id": {
+                    "name": "TV notification entities",
+                    "selector": {
+                        "entity": {
+                            "domain": "notify",
+                            "integration": DOMAIN,
+                            "multiple": True,
+                        }
+                    },
+                },
                 "snapshot": {
                     "name": "Snapshot",
                     "selector": {"select": {"options": ids}},
                 },
                 "device_id": {
-                    "name": "Boxes",
+                    "name": "TVs",
                     "selector": {"device": {"integration": DOMAIN, "multiple": True}},
                 },
             },
@@ -471,9 +488,28 @@ def register(hass):
         available = hass.data[DOMAIN]["boxes"]
         options = hass.data[DOMAIN]["speakers"].options
         ids = data.pop("device_id", None)
-        entities = data.pop("speakers", None)
         if ids is not None and (not ids or any(i not in available for i in ids)):
             raise ServiceValidationError("Select a loaded Herald box")
+        notify_ids = data.pop("entity_id", None)
+        if notify_ids is not None:
+            if not notify_ids:
+                raise ServiceValidationError("Select a Herald notification entity")
+            registry = er.async_get(hass)
+            selected = list(ids or [])
+            for entity_id in notify_ids:
+                entry = registry.async_get(entity_id)
+                if (
+                    entry is None
+                    or entry.domain != "notify"
+                    or entry.platform != DOMAIN
+                    or entry.device_id not in available
+                ):
+                    raise ServiceValidationError(
+                        "Select a notification entity from a connected Herald TV"
+                    )
+                selected.append(entry.device_id)
+            ids = list(dict.fromkeys(selected))
+        entities = data.pop("speakers", None)
         if entities is not None and (
             not entities
             or any(
@@ -503,7 +539,24 @@ def register(hass):
                 guarded(simple(hass, b, call.service, data)) for b in boxes.values()
             ]
             result = dict(zip(boxes, await asyncio.gather(*jobs), strict=True))
-        return result if call.return_response else None
+        if call.return_response:
+            return result
+        if not result:
+            raise ServiceValidationError(
+                "No connected Herald TVs or speakers were selected"
+            )
+        failures = []
+        for target, reply in result.items():
+            if reply.get("ok") is False:
+                name = boxes[target].entry.title if target in boxes else target
+                failures.append(f"{name} ({reply['error']})")
+        if failures:
+            detail = ", ".join(failures)
+            if len(failures) == len(result):
+                raise ServiceValidationError(
+                    f"Herald could not complete {call.service} on {detail}"
+                )
+            _LOGGER.warning("Herald %s failed on %s", call.service, detail)
 
     for name, fields in FIELDS.items():
         schema = dict(TARGET)

@@ -7,98 +7,28 @@ Herald supports Android TV and Google TV running Android 8.0 or later. Use a tru
 1. On the [official release page](https://github.com/iwinties/herald/releases/latest), open **Assets** and choose `herald-<version>.apk`. On the TV you can use a browser that supports downloads. Alternatively, download the APK on a computer, copy it to a USB drive, and open it with a file manager on a TV that supports USB storage.
 2. Open the APK. If Android asks for permission, choose **Settings** and allow the browser or file manager you used under **Install unknown apps**. Some TVs call this **Unknown sources**. Return to the APK and open it again.
 3. Select **Install** (or **Update** if Herald is already installed), then **Open**. You can turn off the installer’s permission once Herald is installed.
-4. In **Herald → Setup**, allow **Show cards over other apps**, select **Test card**, then **Start receiving**. If you use Home Assistant, install the matching integration in HACS or Marketplace and pair the TV.
+4. Follow [Set up with the remote](#set-up-with-the-remote), then [pair Home Assistant](HOME_ASSISTANT.md#add-a-box) or connect another sender.
 
 Prefer a computer and Android platform-tools? Follow [Install with ADB](#install-with-adb). To verify a downloaded APK on a computer, download the matching `.apk.sha256` from the same release and run `sha256sum -c herald-<version>.apk.sha256` in the download folder, substituting the version number. [Home Assistant installation and pairing](HOME_ASSISTANT.md#install)
 
 ### Set up with the remote
 
-**Updating from 0.4.0?** Install the new APK over the existing Herald app. Your settings, permissions and pairings carry over. If your TV still has 0.3.0 or earlier, follow the [package migration](../CHANGELOG.md#040) and pair the new app after installation.
+[Upgrade instructions for existing installations](../CHANGELOG.md#052).
 
 Install the APK and open **Herald → Setup** on the TV.
 
 1. Select **Show cards over other apps** and allow Herald to display overlays. If the TV has no suitable settings screen, the row shows the ADB command.
-2. **More options → Battery (optional)** opens the battery optimization settings. Exempt Herald if MQTT or media fetches need to keep working while the TV sleeps.
-3. Select **Test card** to show “Herald test” above the app. Press Back to dismiss it or wait eight seconds. This works before you enable receiving.
-4. Select **Start receiving** to accept requests. The choice survives reboots and updates. **Stop receiving** turns it off. While receiving is off, Setup and About remain available. If startup fails, retry here.
-5. **Privacy** describes what Herald stores, how to remove it and where to find the policy. You can also open it from About.
+2. Select **Test card**. Press Back to dismiss it or wait eight seconds.
+3. Select **Start receiving**. The Setup screen shows the TV address. Receiving stays on across reboots and updates until you select **Stop receiving**.
+
+Under **More options → Battery (optional)**, you can exempt Herald from battery optimization if MQTT or media fetches need to work while the TV sleeps. **Privacy** explains what Herald stores and how to remove it.
 
 A fresh install starts with receiving off. Herald does not request notification permission. Android 13 and later show the foreground service in the system’s running-apps list. Older TVs may list its minimum-importance notice in the notifications panel.
-
-### Install with ADB
-
-Enable developer options and debugging on the box. If using **Wireless debugging → Pair device with pairing code**, run `adb pair <box>:<pairing-port>` and enter the code at the prompt. Then use the **connection** port shown on the Wireless debugging screen. For a USB connection, approve the computer on the TV and use the serial listed by `adb devices`.
-
-Use an in-place install when updating from 0.4.0. Only versions through 0.3.0 used the old Android package.
-
-From a computer with Android platform-tools (`adb` on PATH) and either `aapt2` or `sha256sum`:
-
-```sh
-tools/install-adb.sh 192.0.2.10
-tools/install-adb.sh '<box>:<connection-port>' --apk 'herald-<version>.apk'
-```
-
-The helper defaults to TCP 5555 for a bare host and to `out/herald.apk`. It installs or updates the package and checks the package path and installed version against the APK. When `aapt2` is unavailable, it checks that the installed APK matches the source checksum before reporting its version. An ordinary install preserves grants and your saved receiving choice.
-
-For full ADB setup, add `--start-receiving`. This also requires curl, OpenSSL, Python 3, sha256sum, base64 and timeout. It grants overlay access and the battery exemption, opens Setup, requests receiving and checks the running version over pinned HTTPS. For a USB serial it uses a temporary port forward. If you changed Herald's native API port, pass that port separately from the ADB connection port.
-
-```sh
-tools/install-adb.sh '<serial>' --start-receiving
-tools/install-adb.sh '<box>:<connection-port>' --start-receiving --port 8080
-```
-
-**Without platform-tools on the host.** Place the release APK and its checksum file in the checkout’s `out/` directory. With the Docker image from `tools/build.sh` available, run these Bash commands, substituting your connection address and release version. For wireless debugging, use `tools/adb.sh pair '<box>:<pairing-port>'` after starting the container if the TV asks for pairing.
-
-```bash
-set -eo pipefail
-serial=192.0.2.10:5555
-version=0.5.1
-apk="herald-$version.apk"
-(cd out && sha256sum -c "$apk.sha256")
-tools/adb.sh start
-trap 'tools/adb.sh stop' EXIT
-tools/adb.sh connect "$serial"
-tools/adb.sh -s "$serial" install -r "/apk/$apk"
-installed=$(tools/adb.sh -s "$serial" shell pm path co.tbrkr.herald | tr -d '\r')
-[[ $installed == package:/* ]]
-device_hash=$(tools/adb.sh -s "$serial" shell sha256sum "${installed#package:}")
-release_hash=$(sha256sum <"out/$apk")
-[[ ${device_hash%% *} == "${release_hash%% *}" ]] || { echo "Installed APK differs" >&2; exit 1; }
-tools/adb.sh stop
-trap - EXIT
-```
-
-The container sees the host’s `out/herald-<version>.apk` as `/apk/herald-<version>.apk`. After the checksum matches, open Herald and follow Setup on the TV.
-
-**Manual installation and start.** With platform-tools on the host, connect to the box, install the verified APK and enable receiving as follows. With container ADB, keep the container running for these steps, substitute `tools/adb.sh` for `adb` and use the APK path under `/apk/`. Run `tools/adb.sh stop` when finished.
-
-```bash
-set -eo pipefail
-serial=192.0.2.10:5555
-adb connect "$serial"
-adb -s "$serial" install -r herald-0.5.1.apk
-adb -s "$serial" shell appops set co.tbrkr.herald SYSTEM_ALERT_WINDOW allow
-adb -s "$serial" shell dumpsys deviceidle whitelist +co.tbrkr.herald
-adb -s "$serial" shell am start -W -n co.tbrkr.herald/.SettingsActivity
-result=$(adb -s "$serial" shell am broadcast -a co.tbrkr.herald.action.ENABLE_RECEIVING \
-  -n co.tbrkr.herald/.ShellReceiver)
-printf '%s\n' "$result"
-[[ $result =~ result=-1([^0-9]|$) ]] || { echo "Start refused" >&2; exit 1; }
-```
-
-After `result=-1`, verify that the listener actually started. In the [API guide](API.md), run the first Bash block with the native address and port, and compare its fingerprint with **Pairing & clients** on the TV. In the same shell, check the running version with the verified pin:
-
-```bash
-curl -q --noproxy '*' --insecure --pinnedpubkey "sha256//${pin:?verified pin required}" -fsS "$box/v1/info" |
-  jq -e '.app == "herald" and .api == 2 and .version == "0.5.1"'
-```
-
-For USB, use your connected serial and omit `adb connect`. Before the API guide’s bootstrap, run `adb -s "$serial" forward tcp:0 tcp:7979` and use `127.0.0.1:<returned-port>` as the address. After the pinned check, remove the forward with `adb -s "$serial" forward --remove tcp:<returned-port>`, substituting the actual port.
 
 ### Pair an application
 
 - **From the client.** Wake the TV, start pairing in the client (or POST /v1/pair/start with a client name), then enter the six digits from the overlay into the client. The finish call uses the same name.
-- **From the TV.** Open **Herald → Pairing & clients → Pair a new client**. Send the displayed code and your client name to /v1/pair/finish. The code stays valid until it times out, also if you leave the screen.
+- **From the TV.** Open **Herald → Pairing & clients → Pair an app or script**. Send the displayed code and your client name to /v1/pair/finish. The code stays valid until it times out, also if you leave the screen.
 - Codes last two minutes. Five wrong attempts or a cancellation starts a one-minute lockout. Store the returned bearer token privately. Revoke it from the client or remove the client on the TV. ADB pairing and Herald pairing are separate.
 
 Use the [HTTPS pairing commands](API.md#pairing-and-device-identity) or the [Home Assistant setup flow](HOME_ASSISTANT.md).
@@ -135,3 +65,71 @@ adb -s "$serial" uninstall co.tbrkr.herald
 ```
 
 To revoke wireless debugging trust on the TV, open **Wireless debugging → Paired devices**, select the computer and choose **Forget**.
+
+### Install with ADB
+
+Enable developer options and debugging on the box. If using **Wireless debugging → Pair device with pairing code**, run `adb pair <box>:<pairing-port>` and enter the code at the prompt. Then use the **connection** port shown on the Wireless debugging screen. For a USB connection, approve the computer on the TV and use the serial listed by `adb devices`.
+
+From a computer with Android platform-tools (`adb` on PATH) and either `aapt2` or `sha256sum`:
+
+```sh
+tools/install-adb.sh 192.0.2.10
+tools/install-adb.sh '<box>:<connection-port>' --apk 'herald-<version>.apk'
+```
+
+The helper defaults to TCP 5555 for a bare host and to `out/herald.apk`. It installs or updates the package and checks the package path and installed version against the APK. When `aapt2` is unavailable, it checks that the installed APK matches the source checksum before reporting its version. An ordinary install preserves grants and your saved receiving choice.
+
+For full ADB setup, add `--start-receiving`. This also requires curl, OpenSSL, Python 3, sha256sum, base64 and timeout. It grants overlay access and the battery exemption, opens Setup, requests receiving and checks the running version over pinned HTTPS. For a USB serial it uses a temporary port forward. If you changed Herald's native API port, pass that port separately from the ADB connection port.
+
+```sh
+tools/install-adb.sh '<serial>' --start-receiving
+tools/install-adb.sh '<box>:<connection-port>' --start-receiving --port 8080
+```
+
+**Without platform-tools on the host.** Place the release APK and its checksum file in the checkout’s `out/` directory. With the Docker image from `tools/build.sh` available, run these Bash commands, substituting your connection address and release version. For wireless debugging, use `tools/adb.sh pair '<box>:<pairing-port>'` after starting the container if the TV asks for pairing.
+
+```bash
+set -eo pipefail
+serial=192.0.2.10:5555
+version=0.5.2
+apk="herald-$version.apk"
+(cd out && sha256sum -c "$apk.sha256")
+tools/adb.sh start
+trap 'tools/adb.sh stop' EXIT
+tools/adb.sh connect "$serial"
+tools/adb.sh -s "$serial" install -r "/apk/$apk"
+installed=$(tools/adb.sh -s "$serial" shell pm path co.tbrkr.herald | tr -d '\r')
+[[ $installed == package:/* ]]
+device_hash=$(tools/adb.sh -s "$serial" shell sha256sum "${installed#package:}")
+release_hash=$(sha256sum <"out/$apk")
+[[ ${device_hash%% *} == "${release_hash%% *}" ]] || { echo "Installed APK differs" >&2; exit 1; }
+tools/adb.sh stop
+trap - EXIT
+```
+
+The container sees the host’s `out/herald-<version>.apk` as `/apk/herald-<version>.apk`. After the checksum matches, open Herald and follow Setup on the TV.
+
+**Manual installation and start.** With platform-tools on the host, connect to the box, install the verified APK and enable receiving as follows. With container ADB, keep the container running for these steps, substitute `tools/adb.sh` for `adb` and use the APK path under `/apk/`. Run `tools/adb.sh stop` when finished.
+
+```bash
+set -eo pipefail
+serial=192.0.2.10:5555
+adb connect "$serial"
+adb -s "$serial" install -r herald-0.5.2.apk
+adb -s "$serial" shell appops set co.tbrkr.herald SYSTEM_ALERT_WINDOW allow
+adb -s "$serial" shell dumpsys deviceidle whitelist +co.tbrkr.herald
+adb -s "$serial" shell am start -W -n co.tbrkr.herald/.SettingsActivity
+result=$(adb -s "$serial" shell am broadcast -a co.tbrkr.herald.action.ENABLE_RECEIVING \
+  -n co.tbrkr.herald/.ShellReceiver)
+printf '%s\n' "$result"
+[[ $result =~ result=-1([^0-9]|$) ]] || { echo "Start refused" >&2; exit 1; }
+```
+
+After `result=-1`, verify that the listener actually started. In the [API guide](API.md), run the first Bash block with the native address and port, and compare its fingerprint with **Pairing & clients** on the TV. In the same shell, check the running version with the verified pin:
+
+```bash
+curl -q --noproxy '*' --insecure --pinnedpubkey "sha256//${pin:?verified pin required}" -fsS "$box/v1/info" |
+  jq -e '.app == "herald" and .api == 2 and .version == "0.5.2"'
+```
+
+For USB, use your connected serial and omit `adb connect`. Before the API guide’s bootstrap, run `adb -s "$serial" forward tcp:0 tcp:7979` and use `127.0.0.1:<returned-port>` as the address. After the pinned check, remove the forward with `adb -s "$serial" forward --remove tcp:<returned-port>`, substituting the actual port.

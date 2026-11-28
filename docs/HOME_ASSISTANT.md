@@ -17,7 +17,7 @@ For dashboard use, the [one-tap announcement button](../examples/home-assistant.
 
 Install Herald on both the TV and Home Assistant. Each TV box and the HA integration must run the same Herald version. This integration requires Home Assistant 2026.10 or newer.
 
-1. **On the TV** (Android TV or Google TV, Android 8 or newer), sideload the APK from the [Herald release](https://github.com/iwinties/herald/releases/latest). In **Herald → Setup**, allow cards over other apps, try **Test card**, then select **Start receiving**. [Step-by-step TV sideloading instructions](SETUP.md#sideload-the-tv-app)
+1. [Install Herald on the TV and enable receiving](SETUP.md#sideload-the-tv-app).
 2. **In Home Assistant**, choose the instructions for your version below. Install the integration version that matches the TV APK, then restart Home Assistant.
 3. [Pair the box and send the first card](#add-a-box). You can [tell us which TV worked or where you got stuck](https://github.com/iwinties/herald/issues/1).
 
@@ -27,11 +27,13 @@ Install Herald on both the TV and Home Assistant. Each TV box and the HA integra
 
 **Manual installation.** Copy the `custom_components/herald` folder from the matching release tag into `<config>/custom_components/`. The manifest should be at `<config>/custom_components/herald/manifest.json`. Restart Home Assistant.
 
-**Updating from 0.4.0 or 0.5.0?** Install 0.5.1 over the existing TV app on each box, update Herald in HACS or Marketplace, then restart Home Assistant. Keep the existing box entries and pairings. If a TV is on 0.3.0 or earlier, follow the [package migration](../CHANGELOG.md#040) before pairing it again.
+[Upgrade instructions for existing installations](../CHANGELOG.md#052).
 
 ### Add a box
 
-In **Settings → Devices & services**, confirm a discovered Herald or choose **Add integration → Herald → Add a Herald box**. Enter the host and native HTTPS port (7979 unless changed). Wake the TV and enable overlay permission. Compare the fingerprint in the pairing dialog with the one on the TV, then enter the TV code if they match. Home Assistant pins the box's certificate and stores its token.
+1. On the TV, open **Herald → Setup** and check that it shows a receiving address.
+2. In **Settings → Devices & services**, select the discovered TV by name and address. For manual setup, choose **Add integration → Herald → Add a Herald box** and enter the host and port separately.
+3. Wake the TV and continue. Compare the fingerprint on both screens, then enter the six-digit code. Home Assistant saves the pairing for future calls.
 
 A certificate change or revoked token stops authenticated requests and starts reauthentication. Compare the fingerprint and enter a fresh code to resume.
 
@@ -56,7 +58,7 @@ Choose **Add integration → Herald → Herald settings** to add the shared sett
 
 Set a reachable **internal Home Assistant URL** under **Settings → System → Network**. Each speaker fetches a signed audio URL valid for 300 seconds. A missing internal URL yields `stage: prepare`, `error: no internal url`. Announcements use a chime, 200 ms pause and voice with a 150 ms fade-in. HA uses ffmpeg and caches up to 50 files under its storage directory. Sounds play without the chime.
 
-`announce`, `play_sound` and `show_card` with `announce: true` follow the same target rules. Calls with **neither** target field go to every loaded box and every configured speaker. Naming any `device_id` or `speakers` limits the call to those targets. Use registry device IDs for boxes and media_player entity IDs for speakers. Empty lists are invalid. A named, unconfigured speaker uses volume 50. Other Herald actions default to all loaded boxes.
+`announce`, `play_sound` and `show_card` with `announce: true` follow the same target rules. Calls with **no** targets go to every loaded box and every configured speaker. Choose TVs by their Herald notify entity (`entity_id`) or device (`device_id`), and Cast speakers by `speakers`. Selecting any target limits delivery to those selections. Empty lists are invalid. A named, unconfigured speaker uses volume 50. Other Herald actions default to all loaded boxes.
 
 A speaker already playing skips a nonurgent request. During night hours, `urgent` requires urgent=true, `never` silences all calls, and `always` permits playback subject to the playing check. One request runs per speaker with up to five waiting. The speaker temporarily uses its configured volume and restores the observed volume (or last known volume) after playback, then turns off again if it was off. If no volume was observable it restores the off state without guessing. Playback waits at most clip length + 15 s, capped at 120 s. Responses can report skipped playing, quiet hours, busy or duplicate. Show/card, box output and box volume apply to boxes only.
 
@@ -106,7 +108,7 @@ data:
 response_variable: delivery
 ```
 
-HA speaks the title followed by the message, or uses `announce_text` as a replacement. Blank speech (including a media-only card without an override) fails with `text is empty` before sending. The same normalized text feeds TTS, the clip key, the speaker and the box fallback. Set `announce_timing: now` to post immediately. Box options include `volume` (0–100), `output`, `urgent`, `duck` and `chime`. Cast uses its configured per-speaker volume and HA chime. Setting `chime: false` disables the chime for both. One request ID covers all targets and the identical retry after a fully sent box request loses its reply.
+HA speaks the title followed by the message, or uses `announce_text` as a replacement. Blank speech (including a media-only card without an override) fails with `text is empty` before sending. The same normalized text feeds TTS, the clip key, the speaker and the box fallback. Set `announce_timing: now` to post immediately. Box options include `volume` (0–100), `output`, `urgent`, `duck` and `chime`. Cast uses its configured per-speaker volume and HA chime. Setting `chime: false` disables the chime for both. If a box receives the request but its reply is lost, HA retries once with the same request ID.
 
 For a spoken card, a successful box row contains the speech job (and duplicate/outcome on a replay), plus the HA stage, status and error fields. A nested audio refusal is reported as a per-box request error even if the card was displayed. A box that omits the speech answer returns `stage: request`, `status: 200`, `error: unsupported`. Match the job to `announce.ended` for the playback result.
 
@@ -125,6 +127,11 @@ data: {id: progress, text: Ready, icon: 'emoji:✅', look: pill, position: botto
 Chip `look` and `position` override the box display defaults. Icons accept built-in names, `emoji:<text>` and `image:<cached-key>`.
 
 ```yaml
+action: herald.clear_chip
+data: {id: progress}
+```
+
+```yaml
 action: herald.save_look
 data: {id: notice, name: Notice, style: {corner: large, border: thin}}
 ```
@@ -135,11 +142,6 @@ data: {id: notice}
 ```
 
 These actions use box targets. Supply a custom ID matching `^[a-z0-9_]{1,32}$`. Save requires a visual `style` object and replaces the complete look. Built-in IDs yield `built-in look`.
-
-```yaml
-action: herald.clear_chip
-data: {id: progress}
-```
 
 ```yaml
 action: herald.announce
@@ -170,7 +172,7 @@ data:
 
 Choose media or an allowlisted path, up to 4 MiB. Boxes check the sound clip key and upload only on a confirmed miss. Box volume, output and urgent are supported. Speaker playback uses the configured speaker volume.
 
-Both audio actions generate a request ID if omitted. A lost box reply is retried once with the original ID. Speakers persist each ID immediately before play_media and retain it through uncertain delivery for 600 seconds, including across HA restarts. Failures are reported independently. Optional response data is keyed by box registry ID or speaker entity ID. Box rows contain ok, stage (prepare, check, upload or request), status and error plus response fields. A box's 409 output not available includes terminal: true.
+Both audio actions generate a request ID if omitted. A lost box reply is retried once with the original ID. Speakers persist each ID immediately before play_media and retain it through uncertain delivery for 600 seconds, including across HA restarts. Without a response variable, a call raises an error if every selected target fails and logs any partial failures. Calls that request response data receive individual target results. Optional response data is keyed by box registry ID or speaker entity ID. Box rows contain ok, stage (prepare, check, upload or request), status and error plus response fields. A box's 409 output not available includes terminal: true.
 
 ```yaml
 action: herald.stop

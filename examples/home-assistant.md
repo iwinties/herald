@@ -1,6 +1,6 @@
 # Everyday Herald automations
 
-[Install and pair a box](../docs/HOME_ASSISTANT.md#add-a-box) first. Replace the sample entity IDs with yours. For each `<box-device-id>`, select your TV in the Herald action's device picker in the visual editor. Switch to YAML to see the device registry ID you can reuse. Leaving both `device_id` and `speakers` out of an announcement sends it to **all** paired, loaded boxes and configured speakers.
+[Install and pair a box](../docs/HOME_ASSISTANT.md#add-a-box) first. Replace the sample entity IDs with yours. Use the Herald notification entity for your TV wherever you see `notify.living_room_tv`. Leaving TV and speaker targets empty sends an announcement to **all connected TVs and configured speakers**.
 
 ## Show the porch camera when the doorbell rings
 
@@ -16,7 +16,7 @@ triggers:
 actions:
   - action: herald.show_card
     data:
-      device_id: ["<box-device-id>"]
+      entity_id: notify.living_room_tv
       id: porch_doorbell
       category: doorbell
       title: Someone is at the door
@@ -41,7 +41,7 @@ tap_action:
   action: perform-action
   perform_action: herald.show_card
   data:
-    device_id: ["<box-device-id>"]
+    entity_id: notify.living_room_tv
     speakers: [media_player.kitchen]
     title: Dinner is ready
     message: Come to the table.
@@ -55,7 +55,7 @@ Save a short recording as `dinner.wav` under **Media → My media**. Try this ca
 ```yaml
 action: herald.announce
 data:
-  device_id: ["<box-device-id>"]
+  entity_id: notify.living_room_tv
   media: media-source://media_source/local/dinner.wav
   chime: false
 ```
@@ -84,7 +84,7 @@ actions:
     then:
       - action: herald.set_chip
         data:
-          device_id: ["<box-device-id>"]
+          entity_id: notify.living_room_tv
           id: garage
           text: Garage open
           position: bottom_right
@@ -92,9 +92,44 @@ actions:
     else:
       - action: herald.clear_chip
         data:
-          device_id: ["<box-device-id>"]
+          entity_id: notify.living_room_tv
           id: garage
 mode: queued
 ```
 
-For an interactive reminder, see the [card with remote buttons](../docs/HOME_ASSISTANT.md#actions) and the [automation that handles a button press](../docs/HOME_ASSISTANT.md#events).
+## Mark a reminder done from the TV remote
+
+Create a Toggle helper named **Laundry collected** and use its entity ID below. When the dryer finishes, have its automation reset the helper with `input_boolean.turn_off` and send this card:
+
+```yaml
+action: herald.show_card
+data:
+  entity_id: notify.living_room_tv
+  id: laundry
+  title: The dryer is done
+  message: Have you collected the laundry?
+  buttons:
+    - {id: done, label: Mark done, action: event}
+    - {id: later, label: Later, action: dismiss}
+```
+
+Add this automation to handle the reply. Select the **Button** event entity on the same Herald TV and replace the sample helper ID. Only **Mark done** on this reminder turns on the helper.
+
+```yaml
+alias: Mark laundry collected from the TV
+triggers:
+  - trigger: state
+    entity_id: event.living_room_tv_button
+    not_to: [unavailable, unknown]
+conditions:
+  - condition: template
+    value_template: >-
+      {{ trigger.to_state.attributes.get('event_type') == 'button'
+         and trigger.to_state.attributes.get('card') == 'laundry'
+         and trigger.to_state.attributes.get('button') == 'done' }}
+actions:
+  - action: input_boolean.turn_on
+    target:
+      entity_id: input_boolean.laundry_collected
+mode: single
+```

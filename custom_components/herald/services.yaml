@@ -1,333 +1,541 @@
 show_card:
-  name: show card
+  name: Show card
+  description: Display text, buttons, an image or live video over the current TV app.
   fields:
     device_id:
-      name: device id
+      name: TVs
       selector:
-        device: {integration: herald, multiple: true}
+        device:
+          integration: herald
+          multiple: true
+      description: Omit all targets to use every connected TV. Spoken cards also reach configured speakers.
     id:
-      name: id
+      name: ID
       selector:
         text: {}
     category:
-      name: category
+      name: Category
       selector:
-        text: {}
+        select:
+          options:
+          - general
+          - doorbell
+          - camera
+          - alarm
+          - media
+          - announcement
+          - reminder
+          - system
+          custom_value: true
     title:
-      name: title
+      name: Title
       selector:
         text: {}
     message:
-      name: message
+      name: Message
       selector:
         text: {}
     from:
-      name: from
+      name: From
       selector:
         text: {}
     buttons:
-      name: buttons
+      name: Buttons
       selector:
         object: {}
     image:
-      name: image
+      name: Image
       selector:
         object: {}
     video:
-      name: video
+      name: Video
       selector:
         object: {}
     style:
-      name: style
+      name: Style
       selector:
         object: {}
     priority:
-      name: priority
+      name: Priority
       selector:
-        text: {}
+        select:
+          options:
+          - low
+          - normal
+          - high
+          - critical
     icon:
-      name: icon
+      name: Icon
       selector:
         text: {}
     speakers:
-      name: speakers
+      name: Cast speakers
       selector:
-        entity: {domain: media_player, multiple: true}
+        entity:
+          domain: media_player
+          multiple: true
     request_id:
-      name: request id
+      name: Request ID
       selector:
         text: {}
+      description: Optional. Reuse for retries of the same announcement.
     volume:
-      name: volume
+      name: TV announcement volume
       selector:
-        number: {min: 0, max: 100}
+        number:
+          min: 0
+          max: 100
     urgent:
-      name: urgent
+      name: Urgent
       selector:
         boolean: {}
     output:
-      name: output
+      name: TV audio output
       selector:
-        select: {options: [auto, tv, speaker]}
+        select:
+          options:
+          - auto
+          - tv
+          - speaker
     tts:
-      name: tts
+      name: Text-to-speech voice
       selector:
-        entity: {domain: tts}
+        entity:
+          domain: tts
     language:
-      name: language
+      name: Language
       selector:
         text: {}
     options:
-      name: options
+      name: Options
       selector:
         object: {}
     chime:
-      name: chime
+      name: Play a chime first
       selector:
-        object: {}
+        boolean: {}
+      description: For a custom TV chime, use clip:<key> in YAML.
     duck:
-      name: duck
+      name: Lower other audio during playback
       selector:
         boolean: {}
     announce:
-      name: announce
+      name: Speak this card aloud
       selector:
         boolean: {}
     announce_text:
-      name: announce text
+      name: Text to speak
       selector:
         text: {}
     announce_timing:
-      name: announce timing
+      name: When to show the card
       selector:
-        select: {options: [with_voice, now]}
+        select:
+          options:
+          - with_voice
+          - now
     look:
-      name: look
+      name: Look
       selector:
-        text: {}
+        select:
+          options:
+          - classic
+          - glass
+          - minimal
+          - banner
+          - alert
+          - pill
+          custom_value: true
+    entity_id:
+      name: TV notification entities
+      description: Select by entity name instead of TV device.
+      selector:
+        entity:
+          integration: herald
+          domain: notify
+          multiple: true
 clear_card:
-  name: clear card
+  name: Clear card
+  description: Remove a card by ID, category, or all cards.
   fields:
     device_id:
-      name: device id
+      name: TVs
       selector:
-        device: {integration: herald, multiple: true}
+        device:
+          integration: herald
+          multiple: true
+      description: Leave both TV fields empty to use every connected TV.
     id:
-      name: id
+      name: ID
       selector:
         text: {}
     category:
-      name: category
+      name: Category
       selector:
-        text: {}
+        select:
+          options:
+          - general
+          - doorbell
+          - camera
+          - alarm
+          - media
+          - announcement
+          - reminder
+          - system
+          custom_value: true
     all:
-      name: all
+      name: All
       selector:
         boolean: {}
+    entity_id:
+      name: TV notification entities
+      description: Select by entity name instead of TV device.
+      selector:
+        entity:
+          integration: herald
+          domain: notify
+          multiple: true
 set_chip:
-  name: set chip
+  name: Set status chip
+  description: Show or update a persistent status indicator.
   fields:
     device_id:
-      name: device id
+      name: TVs
       selector:
-        device: {integration: herald, multiple: true}
+        device:
+          integration: herald
+          multiple: true
+      description: Leave both TV fields empty to use every connected TV.
     id:
-      name: id
+      name: ID
       selector:
         text: {}
     text:
-      name: text
+      name: Text
       selector:
         text: {}
     priority:
-      name: priority
+      name: Priority
       selector:
-        text: {}
+        select:
+          options:
+          - normal
+          - high
     color:
-      name: color
+      name: Color
       selector:
         text: {}
     icon:
-      name: icon
+      name: Icon
       selector:
         text: {}
     expires:
-      name: expires
+      name: Clear after (seconds)
       selector:
-        number: {min: 0, max: 604800}
+        number:
+          min: 0
+          max: 604800
+      description: Use 0 to keep the indicator until cleared.
     look:
-      name: look
+      name: Look
       selector:
-        text: {}
+        select:
+          options:
+          - classic
+          - glass
+          - minimal
+          - banner
+          - alert
+          - pill
+          custom_value: true
     position:
-      name: position
+      name: Position
       selector:
-        text: {}
+        select:
+          options:
+          - top_left
+          - top
+          - top_right
+          - bottom_left
+          - bottom
+          - bottom_right
+    entity_id:
+      name: TV notification entities
+      description: Select by entity name instead of TV device.
+      selector:
+        entity:
+          integration: herald
+          domain: notify
+          multiple: true
 clear_chip:
-  name: clear chip
+  name: Clear status chip
+  description: Remove a status indicator by ID.
   fields:
     device_id:
-      name: device id
+      name: TVs
       selector:
-        device: {integration: herald, multiple: true}
+        device:
+          integration: herald
+          multiple: true
+      description: Leave both TV fields empty to use every connected TV.
     id:
-      name: id
+      name: ID
       selector:
         text: {}
+    entity_id:
+      name: TV notification entities
+      description: Select by entity name instead of TV device.
+      selector:
+        entity:
+          integration: herald
+          domain: notify
+          multiple: true
 announce:
-  name: announce
+  name: Announce
+  description: Speak a message or play a recorded voice note. Choose one audio source.
   fields:
     device_id:
-      name: device id
+      name: TVs
       selector:
-        device: {integration: herald, multiple: true}
+        device:
+          integration: herald
+          multiple: true
+      description: If no TVs, TV entities or speakers are selected, sends to all connected TVs and configured speakers.
     speakers:
-      name: speakers
+      name: Cast speakers
       selector:
-        entity: {domain: media_player, multiple: true}
+        entity:
+          domain: media_player
+          multiple: true
     request_id:
-      name: request id
+      name: Request ID
       selector:
         text: {}
+      description: Optional. Reuse for retries of the same announcement.
     volume:
-      name: volume
+      name: TV announcement volume
       selector:
-        number: {min: 0, max: 100}
+        number:
+          min: 0
+          max: 100
     urgent:
-      name: urgent
+      name: Urgent
       selector:
         boolean: {}
     output:
-      name: output
+      name: TV audio output
       selector:
-        select: {options: [auto, tv, speaker]}
+        select:
+          options:
+          - auto
+          - tv
+          - speaker
     message:
-      name: message
+      name: Message
       selector:
         text: {}
     tts:
-      name: tts
+      name: Text-to-speech voice
       selector:
-        entity: {domain: tts}
+        entity:
+          domain: tts
     language:
-      name: language
+      name: Language
       selector:
         text: {}
     options:
-      name: options
+      name: Options
       selector:
         object: {}
     media:
-      name: media
+      name: Media source
       selector:
         text: {}
     audio:
-      name: audio
+      name: Recorded audio
       selector:
         text: {}
     card:
-      name: card
+      name: Card
       selector:
         object: {}
     show:
-      name: show
+      name: Also show a TV card
       selector:
         boolean: {}
     from:
-      name: from
+      name: From
       selector:
         text: {}
     chime:
-      name: chime
-      selector:
-        object: {}
-    duck:
-      name: duck
+      name: Play a chime first
       selector:
         boolean: {}
+      description: For a custom TV chime, use clip:<key> in YAML.
+    duck:
+      name: Lower other audio during playback
+      selector:
+        boolean: {}
+    entity_id:
+      name: TV notification entities
+      description: Select by entity name instead of TV device.
+      selector:
+        entity:
+          integration: herald
+          domain: notify
+          multiple: true
 play_sound:
-  name: play sound
+  name: Play sound
+  description: Play a sound from your media library or an allowed file.
   fields:
     device_id:
-      name: device id
+      name: TVs
       selector:
-        device: {integration: herald, multiple: true}
+        device:
+          integration: herald
+          multiple: true
+      description: If no TVs, TV entities or speakers are selected, sends to all connected TVs and configured speakers.
     speakers:
-      name: speakers
+      name: Cast speakers
       selector:
-        entity: {domain: media_player, multiple: true}
+        entity:
+          domain: media_player
+          multiple: true
     request_id:
-      name: request id
+      name: Request ID
       selector:
         text: {}
+      description: Optional. Reuse for retries of the same announcement.
     volume:
-      name: volume
+      name: TV announcement volume
       selector:
-        number: {min: 0, max: 100}
+        number:
+          min: 0
+          max: 100
     urgent:
-      name: urgent
+      name: Urgent
       selector:
         boolean: {}
     output:
-      name: output
+      name: TV audio output
       selector:
-        select: {options: [auto, tv, speaker]}
+        select:
+          options:
+          - auto
+          - tv
+          - speaker
     media:
-      name: media
+      name: Media source
       selector:
         text: {}
     path:
-      name: path
+      name: Path
       selector:
         text: {}
+    entity_id:
+      name: TV notification entities
+      description: Select by entity name instead of TV device.
+      selector:
+        entity:
+          integration: herald
+          domain: notify
+          multiple: true
 stop:
-  name: stop
+  name: Stop
+  description: Stop current and queued audio on the selected TVs.
   fields:
     device_id:
-      name: device id
+      name: TVs
       selector:
-        device: {integration: herald, multiple: true}
+        device:
+          integration: herald
+          multiple: true
+      description: Leave both TV fields empty to use every connected TV.
+    entity_id:
+      name: TV notification entities
+      description: Select by entity name instead of TV device.
+      selector:
+        entity:
+          integration: herald
+          domain: notify
+          multiple: true
 restore_settings:
-  name: restore settings
+  name: Restore settings
+  description: Apply a saved settings snapshot to the selected TVs.
   fields:
     device_id:
-      name: device id
+      name: TVs
       selector:
-        device: {integration: herald, multiple: true}
+        device:
+          integration: herald
+          multiple: true
+      description: Leave both TV fields empty to use every connected TV.
     snapshot:
-      name: snapshot
+      name: Snapshot
       selector:
         text: {}
+    entity_id:
+      name: TV notification entities
+      description: Select by entity name instead of TV device.
+      selector:
+        entity:
+          integration: herald
+          domain: notify
+          multiple: true
 save_look:
-  name: save look
+  name: Save Look
+  description: Create or replace a custom Look on the selected TVs.
   fields:
     device_id:
-      name: device id
+      name: TVs
       selector:
-        device: {integration: herald, multiple: true}
+        device:
+          integration: herald
+          multiple: true
+      description: Leave both TV fields empty to use every connected TV.
     id:
-      name: id
+      name: ID
       required: true
       selector:
         text: {}
     style:
-      name: style
+      name: Style
       required: true
       selector:
         object: {}
     name:
-      name: name
+      name: Name
       selector:
         text: {}
+    entity_id:
+      name: TV notification entities
+      description: Select by entity name instead of TV device.
+      selector:
+        entity:
+          integration: herald
+          domain: notify
+          multiple: true
 delete_look:
-  name: delete look
+  name: Delete Look
+  description: Remove a custom Look from the selected TVs.
   fields:
     device_id:
-      name: device id
+      name: TVs
       selector:
-        device: {integration: herald, multiple: true}
+        device:
+          integration: herald
+          multiple: true
+      description: Leave both TV fields empty to use every connected TV.
     id:
-      name: id
+      name: ID
       required: true
       selector:
         text: {}
+    entity_id:
+      name: TV notification entities
+      description: Select by entity name instead of TV device.
+      selector:
+        entity:
+          integration: herald
+          domain: notify
+          multiple: true

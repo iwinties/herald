@@ -304,7 +304,11 @@ public final class SettingsActivity extends Activity {
     private void feedback(String text) { Toast.makeText(this, text, Toast.LENGTH_LONG).show(); }
     private void act(Runnable action) {
         try { action.run(); }
-        catch (Settings.Invalid e) { feedback("Invalid value for " + e.field); }
+        catch (Settings.Invalid e) {
+            if ("id".equals(e.field)) feedback("Use 1–32 lowercase letters, digits or underscores.");
+            else if ("compat.tvoverlay.allowed".equals(e.field)) feedback("Enter a trusted sender IP address or network range.");
+            else feedback("Check the value for " + SettingsModel.fieldLabel(e.field.substring(e.field.lastIndexOf('.') + 1)) + ".");
+        }
         catch (Api.Failure e) {
             String reason = e.getMessage();
             if ("pairing in progress".equals(reason)) reason = "A pairing is in progress";
@@ -317,6 +321,13 @@ public final class SettingsActivity extends Activity {
         b.setOnClickListener(v -> act(run));
         return b;
     }
+    private void confirm(String title, String message, String accept, Runnable apply) {
+        AlertDialog dialog = new AlertDialog.Builder(this).setTitle(title).setMessage(message)
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton(accept, (d, w) -> act(apply)).show();
+        dialog.getButton(AlertDialog.BUTTON_NEGATIVE).requestFocus();
+    }
+
     private void edit(String label, String value, boolean secret, Consumer<String> save) {
         EditText text = new EditText(this);
         text.setSingleLine();
@@ -360,7 +371,8 @@ public final class SettingsActivity extends Activity {
     private boolean moreOptions() {
         String key = optionsKey();
         boolean open = expanded();
-        Button toggle = action(open ? "Fewer options  ▴" : "More options  ▾", () -> {
+        String noun = key.equals("Status") ? "details" : "options";
+        Button toggle = action((open ? "Fewer " : "More ") + noun + (open ? "  ▴" : "  ▾"), () -> {
             getSharedPreferences("settings_ui", MODE_PRIVATE).edit().putBoolean(key, !open).apply();
             render(-1);
             View replacement = rows.findViewWithTag(OPTIONS_TAG);
@@ -369,7 +381,7 @@ public final class SettingsActivity extends Activity {
         toggle.setFocusableInTouchMode(true);
         toggle.setTag(OPTIONS_TAG);
         toggle.setTextColor(0xff9fd8f8);
-        toggle.setContentDescription(open ? "More options, expanded" : "More options, collapsed");
+        toggle.setContentDescription("More " + noun + (open ? ", expanded" : ", collapsed"));
         return open;
     }
 
@@ -646,7 +658,8 @@ public final class SettingsActivity extends Activity {
         if (!moreOptions()) return;
         lookFields(settings, look, "border_color", "border", "shadow", "glow", "accent_style", "title_weight",
                 "button_background", "button_text_color", "button_focus_background", "button_focus_text_color");
-        action("Delete", () -> { settings.deleteLook(id); editingLook = null; render(0); });
+        action("Delete Look", () -> confirm("Delete " + look.name + "?", "Categories using this Look will use their fallback.",
+                "Delete", () -> { settings.deleteLook(id); editingLook = null; render(0); }));
     }
 
     private void lookFields(Settings settings, Look look, String... fields) {
@@ -676,8 +689,8 @@ public final class SettingsActivity extends Activity {
                 if (pickingLook) { lookGrid(); return; }
                 heading(rows, (String)item.get("name"), .028f, TEXT, true);
                 Look assigned = settings.look((String)item.get("look"));
-                action("Look    " + (assigned == null ? item.get("look") : assigned.name), () -> { pickingLook = true; render(0); });
-                field("Announce", item.get("announce"), value -> settings.putCategory(id, Json.fields("announce", value)),
+                action("Look    " + (assigned == null ? item.get("look") : label(assigned.name)), () -> { pickingLook = true; render(0); });
+                field("Speak cards aloud", item.get("announce"), value -> settings.putCategory(id, Json.fields("announce", value)),
                         Arrays.asList(false, true));
                 Map<String,Object> effective = Settings.object(item.get("effective"), "effective");
                 action("Preview buttons", () -> previewButtons(Json.fields("title", item.get("name") + " test",
@@ -688,7 +701,8 @@ public final class SettingsActivity extends Activity {
                 if (!moreOptions()) return;
                 categoryFields(settings, id, effective, "accent", "corner", "border", "opacity", "button_background",
                         "button_text_color", "button_focus_background", "button_focus_text_color");
-                action("Reset to default", () -> {
+                action("Reset to default", () -> confirm("Reset " + item.get("name") + "?",
+                        "Restore its Look, speech and appearance defaults.", "Reset", () -> {
                     synchronized (settings) {
                         Map<String,Object> removals = Json.fields();
                         for (Map<String,Object> current : settings.categories()) {
@@ -699,8 +713,10 @@ public final class SettingsActivity extends Activity {
                         settings.putCategory(id, Json.fields("look", base.look, "announce", base.announce, "style", removals));
                     }
                     render(0);
-                });
-                if (!Category.isBuiltin(id)) action("Delete", () -> { settings.deleteCategory(id); category = null; render(0); });
+                }));
+                if (!Category.isBuiltin(id)) action("Delete category", () -> confirm("Delete " + item.get("name") + "?",
+                        "Remove this custom category and its settings.", "Delete",
+                        () -> { settings.deleteCategory(id); category = null; render(0); }));
                 return;
             }
         }
@@ -803,7 +819,6 @@ public final class SettingsActivity extends Activity {
     private void compatibility() {
         Settings settings = service.settings();
         Map<String,Object> cfg = Compat.config(settings.document());
-        field("enabled", cfg.get("enabled"), value -> saveCompat("enabled", value));
         List<String> senders = new ArrayList<>();
         for (Object address : (List<?>)cfg.get("allowed")) senders.add((String)address);
         field("Allowed senders (comma-separated)", String.join(", ", senders), value -> {
@@ -813,6 +828,10 @@ public final class SettingsActivity extends Activity {
                 for (String part : raw.split(",", -1)) allowed.add(part.trim());
             }
             saveCompat("allowed", allowed);
+        });
+        field("enabled", cfg.get("enabled"), value -> {
+            if (Boolean.TRUE.equals(value) && senders.isEmpty()) feedback("Add an allowed sender first.");
+            else saveCompat("enabled", value);
         });
         if (!moreOptions()) return;
         field("port", cfg.get("port"), value -> saveCompat("port", value));
@@ -829,11 +848,13 @@ public final class SettingsActivity extends Activity {
         Auth auth = service.auth();
         if (selectedClient != null) {
             line(selectedClient.name);
-            action("Remove", () -> { auth.remove(selectedClient); selectedClient = null; render(0); });
+            Auth.Client client = selectedClient;
+            action("Remove client", () -> confirm("Remove " + client.name + "?", "This client will need to pair again.",
+                    "Remove", () -> { auth.remove(client); selectedClient = null; render(0); }));
             return;
         }
         if (!service.settings().pairingAllowed()) group("pairing", "allowed");
-        action("Pair a new client", () -> { auth.startTv(); updatePairing(); });
+        action("Pair an app or script", () -> { auth.startTv(); updatePairing(); });
         pairingStatus = line("");
         pairingStatus.setSaveEnabled(false);
         pairingFingerprint = line("");
@@ -914,8 +935,8 @@ public final class SettingsActivity extends Activity {
         Setup.Target target = Setup.overlayTarget(resolves(specific), resolves(plain), resolves(details));
         Intent overlayIntent = target == Setup.Target.PACKAGE_OVERLAY ? specific
                 : target == Setup.Target.OVERLAY ? plain : target == Setup.Target.APP_DETAILS ? details : null;
-        permissionRow("Show cards over other apps", overlay, overlayIntent, Setup.OVERLAY_ADB);
-        action("Test card    " + Setup.testCardStatus(overlay), () -> {
+        permissionRow("1. Show cards over other apps", overlay, overlayIntent, Setup.OVERLAY_ADB);
+        action("2. Test card    " + Setup.testCardStatus(overlay), () -> {
             if (!android.provider.Settings.canDrawOverlays(this)) { feedback(Setup.testCardStatus(false)); return; }
             if (testCard != null) testCard.dismiss();
             testCard = TestCard.show(this);
@@ -923,9 +944,13 @@ public final class SettingsActivity extends Activity {
         if (receivingStatus != null && !"On".equals(receivingStatus) && !"Off".equals(receivingStatus))
             line("Receiving    " + receivingStatus);
         if (!receiving || (service == null && !HeraldService.startPending)) {
-            action("Start receiving", () -> {
-                HeraldService.requestStart(this, HeraldService.receiving(this));
-                refreshSetup();
+            action("3. Start receiving", () -> {
+                Runnable start = () -> {
+                    HeraldService.requestStart(this, HeraldService.receiving(this));
+                    refreshSetup();
+                };
+                if (android.provider.Settings.canDrawOverlays(this)) start.run();
+                else confirm("Start without TV cards?", "Audio can play. Allow Show cards over other apps to display cards and pairing codes.", "Start", start);
             });
         }
         if (receiving) action("Stop receiving", () -> {
@@ -935,6 +960,17 @@ public final class SettingsActivity extends Activity {
             if (HeraldService.instance() != null) startService(new Intent(this, HeraldService.class).setAction(HeraldService.STOP));
             refreshSetup();
         });
+        if (receiving && service != null && "On".equals(receivingStatus)) {
+            List<String> hosts = addresses();
+            if (hosts.isEmpty()) line("Connect this TV to your network to pair Home Assistant.");
+            else {
+                String address = hosts.get(0);
+                for (String host : hosts) if (!host.startsWith("[")) { address = host; break; }
+                line("Receiving at " + address);
+                if (overlay) line("Next: add this TV in Home Assistant → Devices & services.");
+                else line("Allow cards over other apps to pair Home Assistant.");
+            }
+        }
         privacyRow();
         if (moreOptions()) permissionRow("Battery (optional)", exempt,
                 Setup.batteryTarget(resolves(battery)) == Setup.Target.BATTERY ? battery : null, Setup.BATTERY_ADB);
@@ -948,7 +984,8 @@ public final class SettingsActivity extends Activity {
     private boolean resolves(Intent intent) { return intent.resolveActivity(getPackageManager()) != null; }
 
     private void permissionRow(String label, boolean granted, Intent intent, String fallback) {
-        String title = label + "    " + Setup.grantStatus(granted);
+        String status = Setup.BATTERY_ADB.equals(fallback) ? (granted ? "Exempt" : "Not exempt") : Setup.grantStatus(granted);
+        String title = label + "    " + status;
         Button row = button(rows, title);
         row.setOnClickListener(v -> {
             if (intent != null) {
@@ -982,7 +1019,7 @@ public final class SettingsActivity extends Activity {
         boolean overlay = service.overlayAllowed();
         line("Overlay permission  " + (overlay ? "allowed" : "missing"));
         boolean exempt = getSystemService(PowerManager.class).isIgnoringBatteryOptimizations(getPackageName());
-        line("Battery exemption  " + (exempt ? "allowed" : "missing"));
+        line("Battery exemption  " + (exempt ? "Exempt" : "Not exempt"));
         line("Media3  " + Libs.media3());
         EventLog log = service.events();
         List<?> recent = (List<?>)log.await(Math.max(0, log.latest()-20), 0).get("events");
@@ -1026,9 +1063,20 @@ public final class SettingsActivity extends Activity {
     private void field(String key, Object value, Consumer<Object> put, List<Object> choices) {
         String title = SettingsModel.fieldLabel(key);
         String display = SettingsModel.fieldValue(key, value);
+        if (choices != null && value instanceof String && choices.contains(value)
+                && display.equals(value) && display.matches("[a-z][a-z_]*")) display = label(display.replace('_', ' '));
         int index = rows.getChildCount();
         Consumer<Object> save = next -> { put.accept(next); render(index); };
         LinearLayout row = valueRow(title, display, SettingsModel.help(key));
+        if (choices != null && value instanceof String && ((String)value).matches("#[a-fA-F0-9]{6}")) {
+            View swatch = new View(this);
+            GradientDrawable fill = shape(android.graphics.Color.parseColor((String)value), false);
+            fill.setStroke(1, 0xffb5bdc5);
+            swatch.setBackground(fill);
+            LinearLayout.LayoutParams size = new LinearLayout.LayoutParams(sh(.026f), sh(.026f));
+            size.setMarginEnd(sh(.012f));
+            row.addView(swatch, row.getChildCount() - 1, size);
+        }
         IntConsumer step = dir -> {
             if (choices == null) return;
             int pos = choices.indexOf(value);
