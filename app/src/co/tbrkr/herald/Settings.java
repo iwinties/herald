@@ -138,8 +138,8 @@ final class Settings {
     }
 
     static void writableLookId(String key) {
-        id(key, "id");
         if (Look.builtin(key) != null) throw new Api.Failure(409, "built-in look");
+        id(key, "id");
     }
 
     synchronized Map<String, Object> putLook(String key, Map<String, Object> patch) {
@@ -342,7 +342,7 @@ final class Settings {
                 throw new Invalid(path + ".topic");
             if (!(label instanceof String) || ((String)label).length() > 40) throw new Invalid(path + ".label");
             if (!(row.get("speak") instanceof Boolean)) throw new Invalid(path + ".speak");
-            if (look != null) id(look, path + ".look");
+            if (look != null && !Look.BUILTIN_IDS.contains(look)) id(look, path + ".look");
             String category = id(row.get("category"), path + ".category");
             if (!willExist(category, rootPatch)) {
                 boolean retained = topics(ntfyPrivate()).stream().anyMatch(previous ->

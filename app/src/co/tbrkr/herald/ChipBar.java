@@ -87,7 +87,9 @@ final class ChipBar extends LinearLayout {
                 shape.setStroke(Math.max(1, Math.round(factor * h)), Color.parseColor((String) style.get("border_color")));
             }
             content.setBackground(shape);
-            content.setPadding(size/2, size/4, size/2, size/4);
+            int horizontalPadding = 3 * size / 4;
+            int verticalPadding = size / 3;
+            content.setPadding(horizontalPadding, verticalPadding, horizontalPadding, verticalPadding);
             String icon = (String) row.get("icon");
             View glyph = IconViews.make(context, icon, size, tint, images);
             if (glyph != null) content.addView(glyph, size, size);
@@ -99,7 +101,10 @@ final class ChipBar extends LinearLayout {
                 label.setTextSize(TypedValue.COMPLEX_UNIT_PX, size);
                 label.setTextColor(tint);
                 label.setText(text);
-                content.addView(label, -2, -2);
+                LinearLayout.LayoutParams labelParams = new LinearLayout.LayoutParams(
+                        LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT);
+                if (glyph != null) labelParams.setMarginStart(size / 3);
+                content.addView(label, labelParams);
             }
             content.measure(0, 0);
             addView(content);

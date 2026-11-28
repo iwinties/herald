@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.3
+
+- **Expand and Minimize** switch between the camera card and full screen while the video keeps playing. Back dismisses the card at either size. [Watch the porch delivery demo](docs/images/porch-delivery.mp4) or [use the matching Home Assistant automation](examples/home-assistant.md#show-the-porch-camera-when-the-doorbell-rings).
+- **Paper Note**, **Night Shift** and **On Air** join the built-in Looks. Buttons now use a muted blue-gray selection with a visible focus outline. Choose Solid, Outline, Underline or Raised with any button shape. [Browse the Looks and buttons](docs/STYLES.md#named-looks).
+- Classic gains a soft drop shadow. Status chips keep their chosen colors and have more space around the icon and label.
+- **Upgrade from 0.4.0 or later.** Install the signed APK over the existing TV app, update the Herald integration to 0.5.3 in HACS or Marketplace, then restart Home Assistant. Existing pairings and settings carry over. For earlier versions, follow the [package migration](#040).
+
 ## 0.5.2
 
 - Setup shows the TV address and the next pairing step. Home Assistant identifies discovered TVs by name and address, explains pairing refusals and accepts a code started on the TV after you compare the fingerprint.

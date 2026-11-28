@@ -380,7 +380,7 @@ class FakeHerald:
                 self.emit("settings.changed", revision=self.settings["revision"])
             return ok(**self.settings)
         if group == "looks":
-            builtins = ("classic", "glass", "minimal", "banner", "alert", "pill")
+            builtins = ("classic", "glass", "minimal", "banner", "alert", "pill", "paper-note", "night-shift", "on-air")
             rows = self.settings["looks"]
             if not sep:
                 return ok(

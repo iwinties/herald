@@ -7,7 +7,9 @@ import android.graphics.Color;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Typeface;
+import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.LayerDrawable;
 import android.graphics.drawable.StateListDrawable;
 import android.text.SpannableStringBuilder;
 import android.text.Spanned;
@@ -43,6 +45,9 @@ final class CardView extends FrameLayout {
     private final ImageView picture;
     private final FrameLayout media;
     private boolean full;
+    private final String compactPlacement;
+    private final int compactWidth;
+    private int compactMediaHeight;
     private final int screenHeight;
     private final View placeholder;
     private final View bar;
@@ -62,15 +67,18 @@ final class CardView extends FrameLayout {
         spec = e.spec;
         Map<String, Object> s = e.appearance.fields;
         placement = (String) s.get("placement");
-        full = "fullscreen".equals(placement);
+        boolean startsFullscreen = "fullscreen".equals(placement);
+        if (startsFullscreen) placement = "top_right";
         String size = (String) s.get("size");
         layout = spec.image != null || spec.video != null || !spec.buttons.isEmpty()
                 ? "card" : (String) s.get("layout");
         if ("strip".equals(layout)) {
             placement = placement.startsWith("bottom") ? "bottom" : "top";
-            full = false;
         }
-        width = full || "strip".equals(layout) || "full".equals(size) ? sw : Math.round(sw * (size.equals("small") ? .24f : size.equals("large") ? .44f : .32f));
+        compactPlacement = placement;
+        width = "strip".equals(layout) || ("full".equals(size) && !startsFullscreen) ? sw : Math.round(sw * (size.equals("small") ? .24f : size.equals("large") ? .44f : .32f));
+        compactWidth = width;
+        compactMediaHeight = Math.min(sh / 2, width * 9 / 16);
         int accent = Color.parseColor((String) s.get("accent"));
         int bg = Color.parseColor((String) s.get("background")) & 0xffffff;
         bg |= Math.round(255 * (int) s.get("opacity") / 100f) << 24;
@@ -181,7 +189,7 @@ final class CardView extends FrameLayout {
         }
         media = new FrameLayout(context);
         picture = new ImageView(context);
-        picture.setScaleType(full ? ImageView.ScaleType.CENTER_CROP : ImageView.ScaleType.FIT_CENTER);
+        picture.setScaleType(ImageView.ScaleType.FIT_CENTER);
         placeholder = spec.video != null ? IconViews.make(context, icon, pad * 3, accent, images) : null;
         still = new FrameLayout(context);
         videoTexture = spec.video != null ? new TextureView(context) : null;
@@ -203,6 +211,8 @@ final class CardView extends FrameLayout {
             String spacing = (String) s.get("button_spacing");
             int gap = Math.max(2, Math.round(pad * ("compact".equals(spacing) ? .35f :
                     "roomy".equals(spacing) ? .8f : .55f)));
+            String finish = (String) s.get("button_style");
+            int line = Math.max(2, Math.round(sh * .0025f));
             String buttonShape = (String) s.get("button_shape");
             float radius = "pill".equals(buttonShape) ? sh : "square".equals(buttonShape) ? 0 : pad / 2f;
             for (Map<String, Object> button : spec.buttons) {
@@ -212,12 +222,14 @@ final class CardView extends FrameLayout {
                         ? Settings.object(button.get("style"), "buttons") : java.util.Collections.emptyMap();
                 int normalFill = buttonColor(s, colors, "background");
                 int focusFill = buttonColor(s, colors, "focus_background");
+                int normalText = buttonColor(s, colors, "text_color");
+                int focusText = buttonColor(s, colors, "focus_text_color");
                 StateListDrawable states = new StateListDrawable();
-                states.addState(BUTTON_STATES[0], buttonSurface(focusFill, radius, Math.max(2, Math.round(sh * .0025f))));
-                states.addState(BUTTON_STATES[1], buttonSurface(normalFill, radius, 0));
+                states.addState(BUTTON_STATES[0], buttonSurface(finish, focusFill, focusText, radius, line, true));
+                states.addState(BUTTON_STATES[1], buttonSurface(finish, normalFill, normalText, radius, line, false));
                 label.setBackground(states);
                 label.setTextColor(new ColorStateList(BUTTON_STATES, new int[]{
-                        buttonColor(s, colors, "focus_text_color"), buttonColor(s, colors, "text_color")}));
+                        focusText, normalText}));
                 label.setPadding(gap, gap, gap, gap);
                 LinearLayout.LayoutParams cell = new LinearLayout.LayoutParams(0, -1, 1f);
                 if (buttons.getChildCount() > 0) cell.setMarginStart(gap);
@@ -239,15 +251,9 @@ final class CardView extends FrameLayout {
             pauseHint = null;
         }
         media.setVisibility(spec.video == null ? GONE : VISIBLE);
-        if (full) {
-            addView(media, new LayoutParams(-1,-1));
-            copy.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, new int[]{0,0xe6000000}));
-            addView(copy, new LayoutParams(-1,-2,Gravity.BOTTOM));
-        } else {
-            column.addView(copy);
-            column.addView(media, new LinearLayout.LayoutParams(-1, Math.min(sh/2, width*9/16)));
-            addView(column, new LayoutParams(-1,-2));
-        }
+        column.addView(copy);
+        column.addView(media, new LinearLayout.LayoutParams(-1, compactMediaHeight));
+        addView(column, new LayoutParams(-1,-2));
         bar = new View(context);
         bar.setBackgroundColor(accent);
         // Height 0 here: onMeasure gives the bar the card's height. A MATCH_PARENT bar would take the
@@ -255,6 +261,7 @@ final class CardView extends FrameLayout {
         if ("underline".equals(accentStyle)) addView(bar, new LayoutParams(-1, 2, Gravity.BOTTOM));
         else if ("bar".equals(accentStyle)) addView(bar, new LayoutParams(Math.max(1, Math.round(.004f * sh)), 0,
                 placement.endsWith("left") ? Gravity.RIGHT : Gravity.LEFT));
+        setExpanded(e.expanded, sw);
     }
 
     @Override protected void onMeasure(int widthSpec, int heightSpec) {
@@ -296,12 +303,33 @@ final class CardView extends FrameLayout {
         return Color.parseColor((String) overrides.getOrDefault(key, style.get("button_" + key)));
     }
 
-    private static GradientDrawable buttonSurface(int fill, float radius, int outline) {
+    private static GradientDrawable buttonFace(int fill, float radius) {
         GradientDrawable surface = new GradientDrawable();
         surface.setColor(fill);
         surface.setCornerRadius(radius);
-        if (outline > 0) surface.setStroke(outline, Color.luminance(fill) > .179f ? Color.BLACK : Color.WHITE);
         return surface;
+    }
+
+    private static Drawable buttonSurface(String finish, int fill, int text, float radius, int line, boolean selected) {
+        GradientDrawable face = buttonFace(fill, radius);
+        int contrast = Color.luminance(fill) > .179f ? Color.BLACK : Color.WHITE;
+        if (selected) face.setStroke(line, (contrast & 0xffffff) | 0xd9000000);
+        else if ("outline".equals(finish)) face.setStroke(line, (text & 0xffffff) | 0x99000000);
+        if ("raised".equals(finish)) {
+            LayerDrawable raised = new LayerDrawable(new Drawable[]{buttonFace(Color.rgb(
+                    Color.red(fill) / 2, Color.green(fill) / 2, Color.blue(fill) / 2), radius), face});
+            raised.setLayerInset(1, 0, 0, 0, 2 * line);
+            return raised;
+        }
+        if ("underline".equals(finish)) {
+            GradientDrawable rule = buttonFace((text & 0xffffff) | (selected ? 0xe6000000 : 0x99000000), line);
+            LayerDrawable underlined = new LayerDrawable(new Drawable[]{face, rule});
+            underlined.setLayerGravity(1, Gravity.BOTTOM | Gravity.FILL_HORIZONTAL);
+            underlined.setLayerHeight(1, line);
+            underlined.setLayerInset(1, 4 * line, 0, 4 * line, line);
+            return underlined;
+        }
+        return face;
     }
 
     private static GradientDrawable circle(int color) {
@@ -327,18 +355,31 @@ final class CardView extends FrameLayout {
         invalidateOutline();
     }
 
-    void expand(int screenWidth) {
-        if (full) return;
-        full = true;
-        placement = "fullscreen";
-        width = screenWidth;
-        setFrameRadius(0);
-        // Keep the video texture attached so expansion preserves playback.
-        column.removeView(copy);
-        column.setLayoutParams(new LayoutParams(-1,-1));
-        media.setLayoutParams(new LinearLayout.LayoutParams(-1,-1));
-        copy.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, new int[]{0,0xe6000000}));
-        addView(copy, new LayoutParams(-1,-2,Gravity.BOTTOM));
+    void setExpanded(boolean expanded, int screenWidth) {
+        if (full == expanded || "strip".equals(layout)) return;
+        full = expanded;
+        placement = full ? "fullscreen" : compactPlacement;
+        width = full ? screenWidth : compactWidth;
+        // Only move the caption and controls. The media view stays attached to its decoder.
+        if (full) {
+            column.removeView(copy);
+            copy.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, new int[]{0, 0xe6000000}));
+            addView(copy, indexOfChild(bar), new LayoutParams(-1, -2, Gravity.BOTTOM));
+            setFrameRadius(0);
+        } else {
+            removeView(copy);
+            copy.setBackground(null);
+            column.addView(copy, 0, new LinearLayout.LayoutParams(-1, -2));
+        }
+        picture.setScaleType(full ? ImageView.ScaleType.CENTER_CROP : ImageView.ScaleType.FIT_CENTER);
+        column.setLayoutParams(new LayoutParams(-1, full ? -1 : -2));
+        media.setLayoutParams(new LinearLayout.LayoutParams(-1, full ? -1 : compactMediaHeight));
+        for (int i = 0; i < spec.buttons.size(); i++) {
+            Map<String, Object> button = spec.buttons.get(i);
+            if ("expand".equals(button.get("action"))) {
+                ((TextView) buttons.getChildAt(i)).setText(full ? "Minimize" : (String) button.get("label"));
+            }
+        }
     }
 
     void showVideo(boolean playing, String message) {
@@ -377,8 +418,9 @@ final class CardView extends FrameLayout {
         imagePending = true;
         picture.setImageBitmap(bitmap);
         if (placeholder != null) placeholder.setVisibility(GONE);
-        if (!full) media.getLayoutParams().height = Math.min(screenHeight/2,
-                Math.max(1, Math.round(width * (float) bitmap.getHeight() / bitmap.getWidth())));
+        compactMediaHeight = Math.min(screenHeight / 2, Math.max(1,
+                Math.round(compactWidth * (float) bitmap.getHeight() / bitmap.getWidth())));
+        if (!full) media.getLayoutParams().height = compactMediaHeight;
         media.setVisibility(VISIBLE);
         media.requestLayout();
         reportVisibleImage();

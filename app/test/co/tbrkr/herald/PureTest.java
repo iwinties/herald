@@ -321,7 +321,7 @@ public final class PureTest {
         eq(false, new CardSpec(card, settings).video.get("tcp"), "explicit UDP first");
         pass("video tcp defaults to true and an explicit false is kept");
         builtinLooks();
-        pass("looks: the six built-in looks resolve with the documented values");
+        pass("looks: the nine built-in looks resolve with the documented values");
         lookPrecedence();
         pass("looks: precedence is base, category look, category overrides, request look, request style, top-level icon");
         lookLifecycle();
@@ -431,7 +431,7 @@ public final class PureTest {
         Map<Look,List<String>> tiles = SettingsModel.lookTiles(tileSettings);
         List<String> tileIds = new ArrayList<>();
         for (Look look : tiles.keySet()) tileIds.add(look.id);
-        eq(Arrays.asList("classic", "glass", "minimal", "banner", "alert", "pill", "kids"), tileIds, "tile order");
+        eq(Arrays.asList("classic", "glass", "minimal", "banner", "alert", "pill", "paper-note", "night-shift", "on-air", "kids"), tileIds, "tile order");
         eq(Arrays.asList("Doorbell", "Camera"), tiles.get(tileSettings.look("classic")), "classic uses");
         eq(Arrays.asList("Media"), tiles.get(tileSettings.look("kids")), "custom uses");
         eq(Arrays.asList(), tiles.get(tileSettings.look("pill")), "unused look");
@@ -875,7 +875,7 @@ public final class PureTest {
         Fake f = new Fake();
         List<Map<String, Object>> expected = List.of(
                 Json.fields("layout", "card", "corner", "small", "border", "none", "border_color", "#FFFFFF",
-                        "shadow", "none", "glow", "none", "accent_style", "bar",
+                        "shadow", "soft", "glow", "none", "accent_style", "bar",
                         "background", "#000000", "opacity", 90, "title_color", "#FFFFFF",
                         "text_color", "#FFFFFF", "title_weight", "bold", "label", "none"),
                 Json.fields("layout", "card", "corner", "large", "border", "thin", "border_color", "#5A6272",
@@ -901,17 +901,26 @@ public final class PureTest {
                         "glow", "none", "accent_style", "badge", "background", "#181C24",
                         "opacity", 80, "title_color", "#FFFFFF", "text_color", "#FFFFFF",
                         "title_weight", "bold", "label", "none"));
-        String[] ids = "classic glass minimal banner alert pill".split(" ");
+        String[] ids = "classic glass minimal banner alert pill paper-note night-shift on-air".split(" ");
         List<?> rows = (List<?>) ok(f.route("GET", "looks", Json.fields())).get("looks");
-        eq(ids.length, rows.size(), "six looks");
+        eq(ids.length, rows.size(), "nine looks");
         for (int i = 0; i < ids.length; i++) {
             Map<String, Object> row = Settings.object(rows.get(i), "look");
             eq(ids[i], row.get("id"), "built-in order");
             eq(true, row.get("builtin"), "read-only");
-            eq(Json.parse(Json.stringify(expected.get(i))), row.get("style"), "exact override map");
-            Map<String, Object> fields = f.settings.resolve("general", ids[i], null).fields;
-            expected.get(i).forEach((key, value) -> eq(value, fields.get(key), key));
+            Map<String,Object> overrides = Settings.object(row.get("style"), "style");
+            if (i < expected.size()) eq(Json.parse(Json.stringify(expected.get(i))), overrides, "exact original override map");
+            else eq(List.of("outline", "raised", "underline").get(i - expected.size()), overrides.get("button_style"), "new Look finish");
+            Map<String, Object> fields = Json.parse(Json.stringify(f.settings.resolve("general", ids[i], null).fields));
+            overrides.forEach((key, value) -> eq(value, fields.get(key), key));
         }
+        f.settings.putLook("night_shift", at("style.button_focus_background", "#FFFFFF"));
+        f.settings.putCategory("reminder", Json.fields("look", "night_shift"));
+        f.settings.put(at("ntfy.topics", List.of(Json.fields("topic", "porch", "look", "night-shift"))));
+        f.restart();
+        eq("#FFFFFF", f.settings.effective("reminder").get("button_focus_background"), "existing custom palette survives restart");
+        eq("raised", f.settings.resolve("reminder", "night-shift", null).fields.get("button_style"), "built-in uses separate id");
+        eq("solid", f.settings.resolve("reminder", "night-shift", Json.fields("button_style", "solid")).fields.get("button_style"), "request overrides Look finish");
     }
 
     static void lookPrecedence() {
@@ -940,9 +949,9 @@ public final class PureTest {
         ok(f.route("PUT", "settings", at("display.chip_look", "custom")));
         f.restart();
         List<?> looks = (List<?>) ok(f.route("GET", "looks", Json.fields())).get("looks");
-        eq(38, looks.size(), "capacity");
-        eq(expected, looks.get(6), "custom rows sorted after built-ins");
-        eq("x10", Settings.object(looks.get(9), "look").get("id"), "lexical order");
+        eq(32 + Look.BUILTIN_IDS.size(), looks.size(), "capacity");
+        eq(expected, looks.get(Look.BUILTIN_IDS.size()), "custom rows sorted after built-ins");
+        eq("x10", Settings.object(looks.get(Look.BUILTIN_IDS.size() + 3), "look").get("id"), "lexical order");
         eq("thick", f.settings.effective("general").get("border"), "category uses saved look");
         eq("medium", f.settings.chipVisual(null).get("size"), "replaced style fell back to base");
         eq("thick", f.settings.chipVisual(null).get("border"), "display uses saved look");
@@ -1010,7 +1019,7 @@ public final class PureTest {
                 {"border","none thin medium thick"}, {"border_color","#aBcDeF"}, {"shadow","none soft strong"},
                 {"glow","none accent border"}, {"accent_style","bar badge dot underline none"},
                 {"title_color","#123456"}, {"text_color","#0123AB"}, {"title_weight","bold normal"},
-                {"button_shape","square rounded pill"}, {"button_spacing","compact normal roomy"},
+                {"button_style","solid outline underline raised"}, {"button_shape","square rounded pill"}, {"button_spacing","compact normal roomy"},
                 {"button_background","#654321"}, {"button_text_color","#13579A"},
                 {"button_focus_background","#ABCDEF"}, {"button_focus_text_color","#010203"},
                 {"label","none category"}, {"size","full"}};
@@ -1120,7 +1129,7 @@ public final class PureTest {
             eq(mix[i], row.get("look"), "Mix");
             eq(false, row.get("announce"), "silent default");
             eq(Json.fields(), row.get("style"), "no overrides");
-            eq(34, Settings.object(row.get("effective"), "effective").size(), "full style");
+            eq(35, Settings.object(row.get("effective"), "effective").size(), "full style");
         }
         f.settings.putCategory("extra", Json.fields());
         check(!f.settings.categoryAnnounce("extra"), "custom defaults silent");
@@ -2630,7 +2639,7 @@ public final class PureTest {
                         "show_here", true, "over_playback", "show", "night", "normal",
                         "focus", "auto", "animation", "slide", "layout", "card",
                         "corner", "small", "border", "none", "border_color", "#FFFFFF",
-                        "shadow", "none", "glow", "none", "accent_style", "bar",
+                        "shadow", "soft", "glow", "none", "accent_style", "bar",
                         "title_color", "#FFFFFF", "text_color", "#FFFFFF",
                         "title_weight", "bold", "label", "none"),
                 Json.fields("placement", "top_right", "size", "medium", "text_size", "medium",
@@ -2640,7 +2649,7 @@ public final class PureTest {
                         "show_here", true, "over_playback", "show", "night", "normal",
                         "focus", "auto", "animation", "slide", "layout", "card",
                         "corner", "small", "border", "none", "border_color", "#FFFFFF",
-                        "shadow", "none", "glow", "none", "accent_style", "bar",
+                        "shadow", "soft", "glow", "none", "accent_style", "bar",
                         "title_color", "#FFFFFF", "text_color", "#FFFFFF",
                         "title_weight", "bold", "label", "none"),
                 Json.fields("placement", "center", "size", "large", "text_size", "large",
@@ -2696,9 +2705,9 @@ public final class PureTest {
             eq(ids[i], row.get("id"), "category id");
             eq(Character.toUpperCase(ids[i].charAt(0)) + ids[i].substring(1), row.get("name"), "name");
             eq(true, row.get("builtin"), "built-in flag");
-            expected.get(i).putAll(Json.fields("button_shape", "rounded", "button_spacing", "normal",
-                    "button_background", "#303744", "button_text_color", "#FFFFFF",
-                    "button_focus_background", "#FFFFFF", "button_focus_text_color", "#111827"));
+            expected.get(i).putAll(Json.fields("button_style", "solid", "button_shape", "rounded", "button_spacing", "normal",
+                    "button_background", "#303A46", "button_text_color", "#DCE3EA",
+                    "button_focus_background", "#526579", "button_focus_text_color", "#F3F6F8"));
             eq(expected.get(i), row.get("effective"), "resolved " + ids[i]);
             eq(Json.fields(), row.get("style"), "sparse " + ids[i]);
         }
@@ -3318,9 +3327,21 @@ public final class PureTest {
             f.cards.press(card,0);
             check(e.expanded && f.cards.focusOwner() == card,"fullscreen and focused");
             eq(Math.max(deadline,f.now+60000),e.deadline,"expanded timer");
+            long expandedDeadline = e.deadline;
+            f.now += 1000;
+            f.cards.press(card,0);
+            check(!e.expanded && f.cards.focusOwner() == card,"minimized and still focused");
+            eq(expandedDeadline,e.deadline,"minimize preserves timer");
+            f.cards.press(card,0);
+            check(e.expanded,"can expand again");
             f.cards.back(card,f.now);
             state(f,"a","ended","dismissed");
         }
+        CardSpec initialFull = buttonCard(f, "full", "expand", "placement", "fullscreen");
+        CardBoard.Entry initial = f.cards.showing().get(0);
+        check(initial.expanded, "fullscreen request starts expanded");
+        f.cards.press(initialFull, 0);
+        check(!initial.expanded && f.cards.focusOwner() == initialFull, "fullscreen request can minimize");
     }
 
     static final class Playback implements MediaState.Output {

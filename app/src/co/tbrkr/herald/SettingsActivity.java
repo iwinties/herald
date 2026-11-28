@@ -627,7 +627,8 @@ public final class SettingsActivity extends Activity {
 
     private void newLook() {
         String[] ids = Look.BUILTIN_IDS.toArray(new String[0]);
-        new AlertDialog.Builder(this).setTitle("Copy a built-in look").setItems(ids, (dialog, i) ->
+        String[] names = Look.BUILTIN_IDS.stream().map(id -> label(Look.builtin(id).name)).toArray(String[]::new);
+        new AlertDialog.Builder(this).setTitle("Copy a built-in look").setItems(names, (dialog, i) ->
                 edit("New look name", "", false, name -> {
                     Settings settings = service.settings();
                     synchronized (settings) {
@@ -654,7 +655,7 @@ public final class SettingsActivity extends Activity {
         if (look == null) { editingLook = null; render(0); return; }
         heading(rows, look.name, .028f, TEXT, true);
         action("Preview buttons", () -> previewButtons(lookCard(look)));
-        lookFields(settings, look, "background", "opacity", "corner", "button_shape", "button_spacing");
+        lookFields(settings, look, "background", "opacity", "corner", "button_style", "button_shape", "button_spacing");
         if (!moreOptions()) return;
         lookFields(settings, look, "border_color", "border", "shadow", "glow", "accent_style", "title_weight",
                 "button_background", "button_text_color", "button_focus_background", "button_focus_text_color");
@@ -697,7 +698,7 @@ public final class SettingsActivity extends Activity {
                         "category", id, "style", Json.fields("duration", 8))));
                 action("Send test", () -> test("card", Json.fields("category", id, "title", item.get("name") + " test",
                         "message", "This is a test card.")));
-                categoryFields(settings, id, effective, "placement", "size", "duration", "button_shape", "button_spacing");
+                categoryFields(settings, id, effective, "placement", "size", "duration", "button_style", "button_shape", "button_spacing");
                 if (!moreOptions()) return;
                 categoryFields(settings, id, effective, "accent", "corner", "border", "opacity", "button_background",
                         "button_text_color", "button_focus_background", "button_focus_text_color");
@@ -1123,10 +1124,11 @@ public final class SettingsActivity extends Activity {
             case "shadow": words = "none soft strong"; break;
             case "glow": words = "none accent border"; break;
             case "accent_style": words = "bar badge dot underline none"; break;
+            case "button_style": words = Style.BUTTON_STYLES; break;
             case "button_shape": words = "square rounded pill"; break;
             case "button_spacing": words = "compact normal roomy"; break;
             case "button_background": case "button_text_color": case "button_focus_background": case "button_focus_text_color":
-                words = COLORS + " #303744 #111827"; break;
+                words = COLORS + " #303744 #111827 #303A46 #DCE3EA #526579 #F3F6F8"; break;
             case "title_weight": words = "bold normal"; break;
             case "accent": case "background": case "border_color": words = COLORS; break;
             case "icon": words = "none info bell door camera alarm warning home media megaphone person package tv timer check"; break;

@@ -4,10 +4,10 @@
 
 ## Show the porch camera when the doorbell rings
 
-Paste this into a new automation's YAML editor. When the doorbell sensor turns on, Herald shows a still image over the current TV app for 20 seconds. For live video, replace `image:` with `video:` and keep the same `camera:` line. Live video requires a camera that provides a stream the TV can reach and play.
+When someone rings, the TV shows the porch over the current program. **Expand** opens the camera full screen and becomes **Minimize**. Press OK again to put the playing video back in its corner. **Back** closes the card, and **Dismiss** closes it directly from the corner. The stream is muted so the program audio can continue. [Watch the illustrated delivery demo](../docs/images/porch-delivery.mp4).
 
 ```yaml
-alias: Show the porch when someone rings
+alias: Show the live porch camera when the doorbell rings
 triggers:
   - trigger: state
     entity_id: binary_sensor.doorbell
@@ -19,15 +19,22 @@ actions:
       entity_id: notify.living_room_tv
       id: porch_doorbell
       category: doorbell
-      title: Someone is at the door
-      image:
-        camera: camera.front_porch
+      title: Doorbell
+      message: Someone is at the front porch.
       look: glass
+      video:
+        camera: camera.front_porch
+        muted: true
       style:
-        duration: 20
+        duration: 30
+      buttons:
+        - {id: expand, label: Expand, action: expand}
+        - {id: dismiss, label: Dismiss, action: dismiss}
       announce: false
 mode: restart
 ```
+
+Replace the doorbell sensor, camera and TV with your entities. The camera must supply a stream URL the TV can reach. For a snapshot-only camera, use `image: {camera: camera.front_porch}` in place of the `video` block and remove the Expand action. The docs demo plays an illustrated delivery through Herald’s video player.
 
 ## Call everyone to dinner from a dashboard
 
@@ -106,12 +113,16 @@ action: herald.show_card
 data:
   entity_id: notify.living_room_tv
   id: laundry
+  category: reminder
+  look: paper-note
   title: The dryer is done
   message: Have you collected the laundry?
   buttons:
     - {id: done, label: Mark done, action: event}
     - {id: later, label: Later, action: dismiss}
 ```
+
+Paper Note supplies the warm card and outlined actions. **Later** simply closes this card.
 
 Add this automation to handle the reply. Select the **Button** event entity on the same Herald TV and replace the sample helper ID. Only **Mark done** on this reminder turns on the helper.
 

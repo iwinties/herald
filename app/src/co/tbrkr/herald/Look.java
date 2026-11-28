@@ -11,7 +11,7 @@ import java.util.Set;
 /** Named visual overrides. The same immutable map is exposed and applied. */
 final class Look {
     static final List<String> BUILTIN_IDS = Collections.unmodifiableList(Arrays.asList(
-            "classic", "glass", "minimal", "banner", "alert", "pill"));
+            "classic", "glass", "minimal", "banner", "alert", "pill", "paper-note", "night-shift", "on-air"));
     static final Set<String> VISUAL_KEYS;
     static {
         Set<String> keys = new LinkedHashSet<>(Arrays.asList(
@@ -31,7 +31,7 @@ final class Look {
         Map<String, Object> classic = new LinkedHashMap<>(base);
         classic.keySet().removeAll(Arrays.asList("placement", "size", "text_size", "animation"));
         classic.keySet().removeAll(Style.BUTTON_DEFAULTS.keySet());
-        builtin("classic", classic, Json.fields());
+        builtin("classic", classic, Json.fields("shadow", "soft"));
         builtin("glass", classic, Json.fields("corner", "large", "border", "thin", "border_color", "#5A6272",
                 "shadow", "soft", "accent_style", "badge", "background", "#1C202A", "opacity", 60));
         builtin("minimal", classic, Json.fields("layout", "text", "corner", "none", "accent_style", "dot", "opacity", 0));
@@ -43,6 +43,26 @@ final class Look {
         builtin("pill", classic, Json.fields("layout", "pill", "placement", "top", "size", "medium", "corner", "pill",
                 "border", "thin", "border_color", "#3A404C", "shadow", "soft", "accent_style", "badge",
                 "background", "#181C24", "opacity", 80));
+        builtin("paper-note", "Paper Note", classic, Json.fields(
+                "placement", "top_right", "background", "#F4EAD5", "opacity", 100,
+                "corner", "small", "title_color", "#302B25", "text_color", "#50473D",
+                "accent_style", "dot", "shadow", "soft", "button_style", "outline",
+                "button_shape", "square", "button_background", "#DFD3BB", "button_text_color", "#423831",
+                "button_focus_background", "#C3AF8C", "button_focus_text_color", "#28221C"));
+        builtin("night-shift", "Night Shift", classic, Json.fields(
+                "placement", "bottom_right", "background", "#142D2B", "opacity", 95,
+                "corner", "large", "accent_style", "none", "border", "thin",
+                "border_color", "#63817B", "title_color", "#D7F4E7", "text_color", "#BBD2CB",
+                "shadow", "soft", "button_style", "raised", "button_shape", "pill",
+                "button_background", "#253F3A", "button_text_color", "#D1E6DB", "button_focus_background", "#456658",
+                "button_focus_text_color", "#F1F8EA"));
+        builtin("on-air", "On Air", classic, Json.fields(
+                "placement", "bottom_left", "size", "large", "background", "#222036",
+                "opacity", 95, "corner", "none", "accent_style", "underline",
+                "label", "category", "title_color", "#FAECD5", "text_color", "#DAD2E6",
+                "shadow", "strong", "button_style", "underline", "button_shape", "square",
+                "button_background", "#39344D", "button_text_color", "#DDD7E7", "button_focus_background", "#635473",
+                "button_focus_text_color", "#FAF0EA"));
     }
 
     final String id, name;
@@ -55,9 +75,13 @@ final class Look {
     }
 
     private static void builtin(String id, Map<String, Object> classic, Map<String, Object> changes) {
+        builtin(id, id, classic, changes);
+    }
+
+    private static void builtin(String id, String name, Map<String, Object> classic, Map<String, Object> changes) {
         Map<String, Object> style = new LinkedHashMap<>(classic);
         style.putAll(changes);
-        BUILTINS.put(id, new Look(id, id, style));
+        BUILTINS.put(id, new Look(id, name, style));
     }
 
     static Look builtin(String id) { return BUILTINS.get(id); }

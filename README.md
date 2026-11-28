@@ -2,7 +2,9 @@
 
 Herald shows notifications over the app you’re watching on Android TV or Google TV. See who rang the doorbell, answer a reminder with the remote, or call everyone to dinner on TVs and Cast speakers.
 
-![A Herald doorbell card over a TV scene with View camera and Dismiss buttons](docs/images/porch-card.png)
+[![A porch camera card over a lake scene on Android TV](docs/images/camera-playback.webp)](docs/images/porch-delivery.mp4)
+
+[Watch a doorbell delivery on the TV](docs/images/porch-delivery.mp4) · [Use the Home Assistant automation](examples/home-assistant.md#show-the-porch-camera-when-the-doorbell-rings) · [Browse all nine Looks and button styles](docs/STYLES.md#named-looks).
 
 ### Get started
 
@@ -21,4 +23,4 @@ Herald shows notifications over the app you’re watching on Android TV or Googl
 
 Tried Herald? [Tell us which TV you used and how far you got](https://github.com/iwinties/herald/issues/1). You can also [report a bug or request a feature](https://github.com/iwinties/herald/issues/new/choose).
 
-[0.5.2 changes and upgrade notes](CHANGELOG.md#052) · [Build from source](CONTRIBUTING.md) · [Privacy policy](docs/PRIVACY.md) · [Apache License 2.0](LICENSE)
+[0.5.3 changes and upgrade notes](CHANGELOG.md#053) · [Build from source](CONTRIBUTING.md) · [Privacy policy](docs/PRIVACY.md) · [Apache License 2.0](LICENSE)

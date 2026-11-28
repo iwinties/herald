@@ -6,10 +6,11 @@ import java.util.Map;
 
 /** An effective style. Every instance has all fields, in API document order. */
 final class Style {
+    static final String BUTTON_STYLES = "solid outline underline raised";
     static final Map<String, Object> BUTTON_DEFAULTS = Collections.unmodifiableMap(Json.fields(
-            "button_shape", "rounded", "button_spacing", "normal",
-            "button_background", "#303744", "button_text_color", "#FFFFFF",
-            "button_focus_background", "#FFFFFF", "button_focus_text_color", "#111827"));
+            "button_shape", "rounded", "button_spacing", "normal", "button_style", "solid",
+            "button_background", "#303A46", "button_text_color", "#DCE3EA",
+            "button_focus_background", "#526579", "button_focus_text_color", "#F3F6F8"));
     final Map<String, Object> fields;
 
     private Style(Map<String, Object> fields) {
@@ -95,6 +96,7 @@ final class Style {
                 case "shadow": v = Settings.choice(v, field, "none soft strong"); break;
                 case "glow": v = Settings.choice(v, field, "none accent border"); break;
                 case "accent_style": v = Settings.choice(v, field, "bar badge dot underline none"); break;
+                case "button_style": v = Settings.choice(v, field, BUTTON_STYLES); break;
                 case "button_shape": v = Settings.choice(v, field, "square rounded pill"); break;
                 case "button_spacing": v = Settings.choice(v, field, "compact normal roomy"); break;
                 case "title_weight": v = Settings.choice(v, field, "bold normal"); break;

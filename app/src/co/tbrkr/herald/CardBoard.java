@@ -31,6 +31,7 @@ final class CardBoard {
             this.order = order;
             this.position = order;
             this.appearance = spec.style;
+            expanded = "fullscreen".equals(spec.style.fields.get("placement"));
             deadline = spec.sticky() ? accepted + stickyCap * 1000L : Long.MAX_VALUE;
         }
         Entry(Entry e) {
@@ -369,8 +370,8 @@ final class CardBoard {
         Map<String, Object> button = spec.buttons.get(index);
         switch ((String) button.get("action")) {
             case "expand":
-                e.expanded = true;
-                if (!spec.sticky()) e.deadline = Math.max(e.deadline, clock.getAsLong() + 60000);
+                e.expanded = !e.expanded;
+                if (e.expanded && !spec.sticky()) e.deadline = Math.max(e.deadline, clock.getAsLong() + 60000);
                 display.changed();
                 return;
             case "event":

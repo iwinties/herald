@@ -233,7 +233,7 @@ herald -sS -H @<(auth) -X PUT "$box/v1/images/badge" --data-binary @badge.png
 | `title`, `message`, `from` | Strings truncated without splitting a surrogate pair at 120, 1000 and 40 UTF-16 code units. Sender displays as “From …”. |
 | `image` | Exactly one of `key`, `url` (HTTP/S, 2097152 bytes, 5 s) or `data` (base64, 1048576 decoded bytes). Fetch at acceptance even if waiting. A cache miss, failed fetch or undecodable inline picture leaves the card up and emits image failed. No fetch retry. |
 | `video` | Required `url` (RTSP, HTTP/S progressive, HLS or DASH); optional booleans `tcp` (force RTP over TCP, default true. Set false to try UDP first), `muted` (defaults according to style.video_sound), and `timeout` (integer 3–60 seconds, default 12). No RTSPS or SmoothStreaming. |
-| `buttons` | Up to three objects with unique key `id`, string `label` (1–24 UTF-16 units) and `action` (`event` default, `expand`, `dismiss`). Optional `style` accepts `background`, `text_color`, `focus_background` and `focus_text_color` as `#RRGGBB`. Omitted colors inherit from the card. |
+| `buttons` | Up to three objects with unique key `id`, string `label` (1–24 UTF-16 units) and `action` (`event` default, `expand`, `dismiss`). Optional `style` accepts `background`, `text_color`, `focus_background` and `focus_text_color` as `#RRGGBB`. Omitted colors inherit from the card. An `expand` action becomes **Minimize** in fullscreen. Selecting it again returns the card to its compact placement and restores the supplied label. |
 | `priority` | low, normal (default), high, critical |
 | `look` | Optional existing look ID. Omit to keep the category appearance. An unknown ID, null or a non-string returns 400 `bad look`. |
 | `announce` | Boolean or speech options. See [Spoken cards](#spoken-cards). |
@@ -271,10 +271,11 @@ Defaults below are the category base before looks and overrides.
 | accent_style | bar, badge, dot, underline, none | bar |
 | title_color, text_color | #RRGGBB for title and body respectively | #FFFFFF |
 | title_weight | bold, normal | bold |
+| button_style | solid, outline, underline, raised | solid |
 | button_shape | square, rounded, pill | rounded |
 | button_spacing | compact, normal, roomy | normal |
-| button_background, button_text_color | #RRGGBB fill and label for an unselected action | #303744, #FFFFFF |
-| button_focus_background, button_focus_text_color | #RRGGBB fill and label for the action selected with the remote | #FFFFFF, #111827 |
+| button_background, button_text_color | #RRGGBB fill and label for an unselected action | #303A46, #DCE3EA |
+| button_focus_background, button_focus_text_color | #RRGGBB fill and label for the action selected with the remote | #526579, #F3F6F8 |
 | label | none, category (uppercase category name) | none |
 
 Posting an existing ID replaces its whole spec. A showing card that remains eligible in its category keeps its position, restarts its timer and emits `card.updated`. Otherwise it re-enters admission as a new arrival without an ended event for the old spec. A failure to add the window after admission ends the card as `failed`.
@@ -453,7 +454,7 @@ A look contains visual overrides. The built-in maps and the list of writable vis
 
 | Request | Success |
 |---|---|
-| No body. | `{"ok":true,"looks":[…]}`. Each row has `id,name,builtin,style`. Order is classic, glass, minimal, banner, alert, pill, then custom looks sorted by ID. |
+| No body. | `{"ok":true,"looks":[…]}`. Each row has `id,name,builtin,style`. Order is classic, glass, minimal, banner, alert, pill, paper-note, night-shift, on-air, then custom looks sorted by ID. |
 
 ```bash
 herald -sS -H @<(auth) "$box/v1/looks"

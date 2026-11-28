@@ -27,7 +27,7 @@ Install Herald on both the TV and Home Assistant. Each TV box and the HA integra
 
 **Manual installation.** Copy the `custom_components/herald` folder from the matching release tag into `<config>/custom_components/`. The manifest should be at `<config>/custom_components/herald/manifest.json`. Restart Home Assistant.
 
-[Upgrade instructions for existing installations](../CHANGELOG.md#052).
+[Upgrade instructions for existing installations](../CHANGELOG.md#053).
 
 ### Add a box
 
@@ -64,6 +64,8 @@ A speaker already playing skips a nonurgent request. During night hours, `urgent
 
 ### Actions
 
+[Show a live porch camera with Expand and Dismiss when the doorbell rings](../examples/home-assistant.md#show-the-porch-camera-when-the-doorbell-rings).
+
 The following are independent action examples. Replace the sample device and entity identifiers with yours. For announcements and sounds generate one request_id per logical event and reuse the same ID on retry. The example IDs illustrate one event each.
 
 ```yaml
@@ -77,8 +79,9 @@ data:
     duration: 30
     button_shape: pill
     button_spacing: roomy
-    button_focus_background: "#FFFFFF"
-    button_focus_text_color: "#111827"
+    button_style: outline
+    button_focus_background: "#536878"
+    button_focus_text_color: "#F3F6F8"
   buttons:
     - id: ack
       label: Acknowledge

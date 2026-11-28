@@ -347,7 +347,7 @@ final class Overlay implements CardBoard.Display {
                     w.addView(w.view);
                     w.loading = w.pictured = false;
                 }
-                if (e.expanded) w.view.expand(size.x);
+                w.view.setExpanded(e.expanded, size.x);
                 w.owner = e.spec == focus;
                 w.view.buttonFocus(w.owner, paused);
                 w.syncBack();

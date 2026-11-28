@@ -8,21 +8,30 @@ Herald applies each layer in order. Later layers override only the keys they sup
 
 **Category base → category look → category style overrides → request look → request style → top-level icon.**
 
-For example, post `{"category":"alarm","message":"Check now","look":"classic","style":{"icon":"bell"},"icon":"emoji:🔔"}`. Alarm's alert look supplies center placement, large size and large text. Classic keeps those three and supplies its black background, white text, card layout, small corner, bar and no border, glow or label. The top-level bell emoji wins over the vector bell in the request style.
+For example, post `{"category":"alarm","message":"Check now","look":"classic","style":{"icon":"bell"},"icon":"emoji:🔔"}`. Alarm's alert look supplies center placement, large size and large text. Classic keeps those three and supplies its soft shadow, black background, white text, card layout, small corner, bar and no border, glow or label. The top-level bell emoji wins over the vector bell in the request style.
 
 The background opacity controls how much of the current app shows through the card background. The live picture uses the source brightness, follows the card corners, and sits inside the border. Video cards receive pointer input inside their window so Android can show the picture at full opacity. Touches outside a corner video card pass to the app underneath. Cards without video remain click-through. The shadow and glow extend outside the frame. Fullscreen cards have square corners and shade the caption area for readability.
 
 ## Named looks
 
-These JSON objects are the complete built-in override maps. The table below them describes the underlying category defaults. A custom look can set any subset of `placement`, `size`, `text_size`, `background`, `opacity`, `layout`, `corner`, `border`, `border_color`, `shadow`, `glow`, `accent_style`, `title_color`, `text_color`, `title_weight`, `label`, `animation` and the six `button_` fields in the table below. An empty map leaves the previous card layer intact. See the [Looks API](API.md#looks) to save or replace one.
+![The nine built-in Looks rendered over the same TV scene](images/default-looks.webp)
+
+**Paper Note** is a cream reminder with dark text. **Night Shift** sits in the lower right with a dark teal surface. **On Air** uses a lower-left broadcast caption with a category label and a colored rule. Use `paper-note`, `night-shift`, or `on-air` in an automation.
+
+Banner spans the screen. The gallery crops it so you can read the notification at the same scale as the other cards.
+
+These JSON objects are the complete built-in override maps. The table below them describes the underlying category defaults. A custom look can set any subset of `placement`, `size`, `text_size`, `background`, `opacity`, `layout`, `corner`, `border`, `border_color`, `shadow`, `glow`, `accent_style`, `title_color`, `text_color`, `title_weight`, `label`, `animation` and the seven `button_` fields in the table below. An empty map leaves the previous card layer intact. See the [Looks API](API.md#looks) to save or replace one.
 
 ```json
-{"classic":{"layout":"card","corner":"small","border":"none","border_color":"#FFFFFF","shadow":"none","glow":"none","accent_style":"bar","background":"#000000","opacity":90,"title_color":"#FFFFFF","text_color":"#FFFFFF","title_weight":"bold","label":"none"},
+{"classic":{"layout":"card","corner":"small","border":"none","border_color":"#FFFFFF","shadow":"soft","glow":"none","accent_style":"bar","background":"#000000","opacity":90,"title_color":"#FFFFFF","text_color":"#FFFFFF","title_weight":"bold","label":"none"},
  "glass":{"layout":"card","corner":"large","border":"thin","border_color":"#5A6272","shadow":"soft","glow":"none","accent_style":"badge","background":"#1C202A","opacity":60,"title_color":"#FFFFFF","text_color":"#FFFFFF","title_weight":"bold","label":"none"},
  "minimal":{"layout":"text","corner":"none","border":"none","border_color":"#FFFFFF","shadow":"none","glow":"none","accent_style":"dot","background":"#000000","opacity":0,"title_color":"#FFFFFF","text_color":"#FFFFFF","title_weight":"bold","label":"none"},
  "banner":{"layout":"strip","placement":"top","size":"full","corner":"none","border":"none","border_color":"#FFFFFF","shadow":"soft","glow":"none","accent_style":"underline","background":"#0C1018","opacity":80,"title_color":"#FFFFFF","text_color":"#FFFFFF","title_weight":"bold","label":"none"},
  "alert":{"layout":"card","placement":"center","size":"large","text_size":"large","corner":"medium","border":"thick","border_color":"#FF6B6B","shadow":"strong","glow":"border","accent_style":"badge","background":"#781218","opacity":85,"title_color":"#FFFFFF","text_color":"#FFE3E3","title_weight":"bold","label":"category"},
- "pill":{"layout":"pill","placement":"top","size":"medium","corner":"pill","border":"thin","border_color":"#3A404C","shadow":"soft","glow":"none","accent_style":"badge","background":"#181C24","opacity":80,"title_color":"#FFFFFF","text_color":"#FFFFFF","title_weight":"bold","label":"none"}}
+ "pill":{"layout":"pill","placement":"top","size":"medium","corner":"pill","border":"thin","border_color":"#3A404C","shadow":"soft","glow":"none","accent_style":"badge","background":"#181C24","opacity":80,"title_color":"#FFFFFF","text_color":"#FFFFFF","title_weight":"bold","label":"none"},
+ "paper-note":{"layout":"card","corner":"small","border":"none","border_color":"#FFFFFF","shadow":"soft","glow":"none","accent_style":"dot","background":"#F4EAD5","opacity":100,"title_color":"#302B25","text_color":"#50473D","title_weight":"bold","label":"none","placement":"top_right","button_style":"outline","button_shape":"square","button_background":"#DFD3BB","button_text_color":"#423831","button_focus_background":"#C3AF8C","button_focus_text_color":"#28221C"},
+ "night-shift":{"layout":"card","corner":"large","border":"thin","border_color":"#63817B","shadow":"soft","glow":"none","accent_style":"none","background":"#142D2B","opacity":95,"title_color":"#D7F4E7","text_color":"#BBD2CB","title_weight":"bold","label":"none","placement":"bottom_right","button_style":"raised","button_shape":"pill","button_background":"#253F3A","button_text_color":"#D1E6DB","button_focus_background":"#456658","button_focus_text_color":"#F1F8EA"},
+ "on-air":{"layout":"card","corner":"none","border":"none","border_color":"#FFFFFF","shadow":"strong","glow":"none","accent_style":"underline","background":"#222036","opacity":95,"title_color":"#FAECD5","text_color":"#DAD2E6","title_weight":"bold","label":"category","placement":"bottom_left","size":"large","button_style":"underline","button_shape":"square","button_background":"#39344D","button_text_color":"#DDD7E7","button_focus_background":"#635473","button_focus_text_color":"#FAF0EA"}}
 ```
 
 General, announcement, reminder and system start with glass. Doorbell and camera use classic, alarm uses alert and media uses pill. All eight start with Announce off. Unknown valid category IDs resolve to general. New custom categories use general's base with glass and Announce off. The limit is 32 categories including the built-ins.
@@ -66,10 +75,11 @@ General, announcement, reminder and system start with glass. Doorbell and camera
 | accent_style | bar, badge, dot, underline, none | bar |
 | title_color, text_color | #RRGGBB for title and body respectively | #FFFFFF |
 | title_weight | bold, normal | bold |
+| button_style | solid, outline, underline, raised | solid |
 | button_shape | square, rounded, pill | rounded |
 | button_spacing | compact, normal, roomy | normal |
-| button_background, button_text_color | #RRGGBB fill and label for an unselected action | #303744, #FFFFFF |
-| button_focus_background, button_focus_text_color | #RRGGBB fill and label for the action selected with the remote | #FFFFFF, #111827 |
+| button_background, button_text_color | #RRGGBB fill and label for an unselected action | #303A46, #DCE3EA |
+| button_focus_background, button_focus_text_color | #RRGGBB fill and label for the action selected with the remote | #526579, #F3F6F8 |
 | label | none, category (uppercase category name) | none |
 
 ### Layout, decorations and placement
@@ -78,7 +88,17 @@ Cards with media or buttons always use the card layout. For text-only content, `
 
 Small, medium and large corners use 1.2%, 2% and 3% of screen height. A pill radius is half the card height. Thin, medium and thick strokes are 0.1%, 0.2% and 0.35% of screen height, at least one pixel. Soft and strong drop shadows follow the rounded edge and fade into the scene below it. Strong casts a wider, deeper shadow. The shadow stays outside the surface so translucent cards and chips keep their chosen opacity. Glow extends 0.6% in the accent or border color. Placement anchors the **content** with 3% screen margins before adding these effects. An axis filled by the content has zero margin. Decorations may clip at the screen edge. Stacking uses a 1.5% screen-height gap between content edges and centers a centered stack as a group.
 
-Chips resolve their chosen look over the base visual defaults. They use its background, opacity, border, shadow and glow. The shape is a pill except that corner `none` gives a small radius. Chip color tints text and vector icons and supplies accent glow. Each position has its own bar of five plus an overflow count in the display look. Visible high chips pulse three times over 1.5 seconds on appearance, promotion, or a text, color or icon change.
+Chips resolve their chosen look over the base visual defaults. They use its background, opacity, border, shadow and glow. The shape is a pill except that corner `none` gives a small radius. Each chip has padding around its contents and a gap between its icon and label when both are present. Chip color tints text and vector icons and supplies accent glow. Each position has its own bar of five plus an overflow count in the display look. Visible high chips pulse three times over 1.5 seconds on appearance, promotion, or a text, color or icon change.
+
+![Three Glass status chips with door, check and home icons](images/status-chips.webp)
+
+### Live camera view
+
+The doorbell interrupts a lake scene with a muted porch view. Watch the courier approach and leave a package, press OK on **Expand** for a closer look, and choose **Minimize** to return the camera to its corner. **Back** dismisses the card. The footage is an illustration played through Herald on Android TV.
+
+[![A delivery at the front porch appears in a Herald camera card with Expand and Dismiss](images/camera-playback.webp)](images/porch-delivery.mp4)
+
+[Watch the demo](images/porch-delivery.mp4) · [Open the full-resolution screenshot](images/porch-card.png) · [Use this Home Assistant automation](../examples/home-assistant.md#show-the-porch-camera-when-the-doorbell-rings)
 
 ### Admission and timers
 
@@ -92,6 +112,14 @@ A timed request while the screen is off is skipped. Screen-off expires active ti
 
 ### Buttons and playback
 
+The default button uses a dark slate fill. Remote focus lightens it to blue-gray and adds an outline. Choose **Button style** in a category or custom Look to switch between Solid, Outline, Underline and Raised. Shape and spacing are independent. Paper Note starts with Outline, Night Shift with Raised and On Air with Underline.
+
+![Solid, Outline, Underline and Raised with the remote on either action](images/button-finishes.webp)
+
+![Square, rounded and pill buttons, each shown with compact, normal and roomy spacing](images/button-variations.webp)
+
+![First and second action selected, buttons paused during playback, and a custom mint action](images/remote-states.webp)
+
 On the TV, open **Looks** and edit a custom look, or open **Categories** and choose a category. Choose **Preview buttons** to try the current colors and move selection between two actions. Both sample actions close the preview.
 
 `button_spacing` controls the gap above the row, the space between actions, the padding inside each button and the gap before the remote hint. A card without buttons reserves no action space. The selected button also gets a light or dark outline against its selected fill. Use a contrasting label color for each fill.
@@ -100,4 +128,4 @@ A single action can override any of the four palette colors through its own `sty
 
 The most recently accepted eligible card with buttons and focus auto can take focus. With `display.focus_while_playing:false`, buttons draw at half opacity with “Pause to use buttons” during external sound and become available when it stops. Select with Left/Right then OK. Selection starts at the first button and stops at either end. A small **Back** keycap under the actions shows how to close the focused card. A focused card handles only the four D-pad directions, D-pad center, Enter, numeric Enter and Back. Other keys pass to Android, including media and volume keys supported by the active route.
 
-An event button emits card.button then ends the card as button. Dismiss ends it as dismissed. Expand makes it fullscreen for at least 60 seconds, subject to its original sticky cap; BACK dismisses it. See the [API](API.md) for event fields and signal timing.
+An event button emits card.button then ends the card as button. Dismiss ends it as dismissed. Expand switches to fullscreen and gives a timed card at least 60 seconds. The action becomes **Minimize**. Selecting it restores the original placement and button label while the video keeps playing. A card that starts fullscreen minimizes to the upper right. Sticky cards keep their original cap. **Back** dismisses the card at either size. See the [API](API.md) for event fields and signal timing.
